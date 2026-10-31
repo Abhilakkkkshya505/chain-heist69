@@ -11,3 +11,4 @@ For mini-game mechanics implementation, the following reference repositories hav
    - **Role**: Reference implementation for Vault Run (Phaser 3 ghost state machines, tile grid targeting for Blinky/Pinky/Inky/Clyde styles, and power pellet frightened mode).
 
 *Note: Per project architecture rules, only game logic and algorithms are referenced. Neither repository is copied or merged as a whole project.*
+

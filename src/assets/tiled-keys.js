@@ -7,6 +7,9 @@ export const OBJECT_LAYER_NAMES = Object.freeze({
   REVIVE_LOCATION: 'Revive-Location',
   SCENE_TRANSITIONS: 'Scene-Transitions',
   SIGN: 'Sign',
+  PORTALS: 'Portals',
+  TOKENS: 'Tokens',
+  COINS: 'Coins',
 });
 
 export const TILED_SIGN_PROPERTY = Object.freeze({

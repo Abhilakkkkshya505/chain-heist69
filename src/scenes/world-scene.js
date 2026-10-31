@@ -156,10 +156,10 @@ export class WorldScene extends BaseScene {
     // the data manager. Originally, this was a hard coded value, and was updated to be dynamic
     // based on our level data in Tiled.
     let isNewGame = !(dataManager.store.get(DATA_MANAGER_STORE_KEYS.GAME_STARTED) || false);
-    if (isNewGame) {
-      // find player spawn location and update the data manager
-      const map = this.#getLevelTileMap(WORLD_ASSET_KEYS.MAIN_1_LEVEL);
-      const playerSpawnLocationObject = map.getObjectLayer(OBJECT_LAYER_NAMES.PLAYER_SPAWN_LOCATION).objects[0];
+    const map = this.#getLevelTileMap(WORLD_ASSET_KEYS.MAIN_1_LEVEL);
+    const playerSpawnLocationObject = map.getObjectLayer(OBJECT_LAYER_NAMES.PLAYER_SPAWN_LOCATION).objects[0];
+    const currentPos = dataManager.store.get(DATA_MANAGER_STORE_KEYS.PLAYER_POSITION);
+    if (isNewGame || !currentPos || currentPos.x >= map.widthInPixels || currentPos.y >= map.heightInPixels) {
       dataManager.store.set(DATA_MANAGER_STORE_KEYS.PLAYER_POSITION, {
         x: playerSpawnLocationObject.x,
         y: playerSpawnLocationObject.y - TILE_SIZE,
@@ -221,7 +221,36 @@ export class WorldScene extends BaseScene {
       console.log(`[${WorldScene.name}:create] encountered error while creating collision layer using data from tiled`);
       return;
     }
-    collisionLayer.setAlpha(TILED_COLLISION_LAYER_ALPHA).setDepth(2);
+    // Hide the collision layer
+    collisionLayer.setAlpha(0).setDepth(2).setVisible(false);
+
+    // F1 toggles a red overlay of the collision tiles
+    const collisionDebugGfx = this.add.graphics().setDepth(100);
+    let collisionDebugVisible = false;
+    collisionDebugGfx.setVisible(false);
+
+    const toggleCollisionDebug = () => {
+      collisionDebugVisible = !collisionDebugVisible;
+      collisionDebugGfx.clear();
+      if (collisionDebugVisible) {
+        collisionDebugGfx.fillStyle(0xff0000, 0.5);
+        collisionLayer.forEachTile((tile) => {
+          if (tile.index !== -1) {
+            collisionDebugGfx.fillRect(tile.pixelX, tile.pixelY, tile.width, tile.height);
+          }
+        });
+        collisionDebugGfx.setVisible(true);
+      } else {
+        collisionDebugGfx.setVisible(false);
+      }
+    };
+
+    this.input.keyboard?.on('keydown-F1', (event) => {
+      if (event) {
+        event.preventDefault();
+      }
+      toggleCollisionDebug();
+    });
 
     // create interactive layer
     const hasSignLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.SIGN) !== null;
@@ -239,10 +268,57 @@ export class WorldScene extends BaseScene {
     this.#createEncounterAreas(map);
 
     if (!this.#sceneData.isInterior) {
-      this.cameras.main.setBounds(0, 0, 2560, 5184);
+      this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     }
     this.cameras.main.setZoom(0.8);
-    this.add.image(0, 0, `${this.#sceneData.area.toUpperCase()}_BACKGROUND`, 0).setOrigin(0);
+
+    // draw the image layer at depth 0 with pixel-art scaling
+    const bgKey = this.textures.exists('neo-city') ? 'neo-city' : `${this.#sceneData.area.toUpperCase()}_BACKGROUND`;
+    const bgImage = this.add.image(0, 0, bgKey, 0).setOrigin(0).setDepth(0);
+    if (bgImage && bgImage.texture) {
+      bgImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    // for now, draw the Portals as glowing circles and ignore Tokens/Coins
+    const portalsLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.PORTALS);
+    if (portalsLayer && portalsLayer.objects) {
+      portalsLayer.objects.forEach((obj) => {
+        const cx = obj.x + (obj.width ? obj.width / 2 : 0);
+        const cy = obj.y + (obj.height ? obj.height / 2 : 0);
+
+        const portalGfx = this.add.graphics().setDepth(5);
+        portalGfx.fillStyle(0x00ffff, 0.25);
+        portalGfx.fillCircle(cx, cy, 32);
+        portalGfx.fillStyle(0x00ff88, 0.45);
+        portalGfx.fillCircle(cx, cy, 22);
+        portalGfx.fillStyle(0xffffff, 0.9);
+        portalGfx.fillCircle(cx, cy, 12);
+
+        this.tweens.add({
+          targets: portalGfx,
+          alpha: { from: 0.6, to: 1.0 },
+          scaleX: { from: 0.95, to: 1.05 },
+          scaleY: { from: 0.95, to: 1.05 },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+
+        const gameName = obj.properties?.find((p) => p.name === 'game')?.value || obj.name;
+        this.add
+          .text(cx, cy - 42, `[ ${gameName.toUpperCase()} ]`, {
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontStyle: 'bold',
+            color: '#00ffff',
+            stroke: '#000000',
+            strokeThickness: 3,
+          })
+          .setOrigin(0.5)
+          .setDepth(6);
+      });
+    }
 
     // create items and collisions
     this.#createItems(map);
@@ -283,8 +359,11 @@ export class WorldScene extends BaseScene {
       npc.addCharacterToCheckForCollisionsWith(this.#player);
     });
 
-    // create foreground for depth
-    this.add.image(0, 0, `${this.#sceneData.area.toUpperCase()}_FOREGROUND`, 0).setOrigin(0);
+    // create foreground for depth if texture exists
+    const fgKey = `${this.#sceneData.area.toUpperCase()}_FOREGROUND`;
+    if (this.textures.exists(fgKey)) {
+      this.add.image(0, 0, fgKey, 0).setOrigin(0).setDepth(1);
+    }
 
     // create menu
     this.#menu = new WorldMenu(this);
