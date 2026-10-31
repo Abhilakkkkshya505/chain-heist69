@@ -103,3 +103,4 @@ export class DebugAssetsScene extends Phaser.Scene {
     this.#contentContainer.y = 50 - this.#scrollOffsetY;
   }
 }
+
