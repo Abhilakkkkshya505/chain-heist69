@@ -141,3 +141,4 @@ Controls are encapsulated in the `Controls` class:
    - Hook their battle trigger in `BattleScene` or `WorldScene` to launch our 3 mini-game scenes (`BlockFlyerScene`, `VaultRunScene`, `ChainSnakeScene`).
 3. **Global State Integration**:
    - Extend `dataManager` or attach `state.js` to track `lives: 3`, `score: 0`, `runTimer: 420`, and `cleared: []`.
+

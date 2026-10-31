@@ -1,4 +1,5 @@
-/assets/images
+/assets/images/*
+!/assets/images/bithunter
 /assets/fonts
 /assets/audio
 .DS_Store
