@@ -25,6 +25,7 @@ const game = new Phaser.Game({
   },
   backgroundColor: '#000000',
 });
+window.__game = game;
 
 game.scene.add(SCENE_KEYS.PRELOAD_SCENE, PreloadScene);
 game.scene.add(SCENE_KEYS.WORLD_SCENE, WorldScene);

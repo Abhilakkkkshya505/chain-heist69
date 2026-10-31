@@ -22,7 +22,7 @@ import path from 'path';
   await page.screenshot({ path: titlePath });
   console.log('Title screen captured to:', titlePath);
 
-  // Click canvas to focus and hold Space to start New Game -> WorldScene
+  // Focus canvas and press Space to start New Game -> WorldScene
   console.log('Starting new game...');
   await page.locator('canvas').click();
   await page.waitForTimeout(100);
@@ -30,15 +30,15 @@ import path from 'path';
   await page.waitForTimeout(150);
   await page.keyboard.up('Space');
 
-  // Wait for fade-out and fade-in to WorldScene
+  // Wait for fade-in to WorldScene
   await page.waitForTimeout(3000);
 
   const worldPath = path.resolve('docs/world_scene.png');
   await page.screenshot({ path: worldPath });
   console.log('World scene captured to:', worldPath);
 
-  // Test F1 to toggle collision overlay
-  console.log('Pressing F1 to toggle red collision overlay...');
+  // 1. Press F1 to toggle red collision overlay
+  console.log('Toggling F1 collision overlay...');
   await page.keyboard.press('F1');
   await page.waitForTimeout(1000);
 
@@ -46,38 +46,21 @@ import path from 'path';
   await page.screenshot({ path: collisionOverlayPath });
   console.log('Collision overlay captured to:', collisionOverlayPath);
 
-  // Toggle collision overlay off
+  // Toggle F1 off
   await page.keyboard.press('F1');
   await page.waitForTimeout(500);
 
-  // Walk around the map with arrow keys
-  console.log('Walking around Neo-City...');
-  // Walk Left towards city
-  for (let i = 0; i < 4; i++) {
-    await page.keyboard.press('ArrowLeft');
-    await page.waitForTimeout(350);
-  }
-  // Walk Down
-  for (let i = 0; i < 3; i++) {
-    await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(350);
-  }
-  // Walk Right
-  for (let i = 0; i < 5; i++) {
-    await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(350);
-  }
-  // Walk Up
-  for (let i = 0; i < 2; i++) {
-    await page.keyboard.press('ArrowUp');
-    await page.waitForTimeout(350);
-  }
+  // 2. Test Wall Collision: walk Left towards the building/tree wall
+  console.log('Testing wall collision: walking Left towards building wall...');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForTimeout(2000);
+  await page.keyboard.up('ArrowLeft');
+  await page.waitForTimeout(500);
 
-  await page.waitForTimeout(1000);
   const walkingPath = path.resolve('docs/walkthrough_neo_city.png');
   await page.screenshot({ path: walkingPath });
-  console.log('Walking screenshot captured to:', walkingPath);
+  console.log('Walkthrough screenshot captured to:', walkingPath);
 
   await browser.close();
-  console.log('Playwright verification completed successfully!');
+  console.log('Step 3.4 wall testing and verification completed successfully!');
 })();

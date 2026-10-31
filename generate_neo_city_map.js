@@ -26,53 +26,49 @@ function clearWalkable(x1, y1, x2, y2) {
   }
 }
 
-// 1. Perimeter borders
-fillBlocked(0, 0, W - 1, 1);
-fillBlocked(0, H - 2, W - 1, H - 1);
-fillBlocked(0, 0, 1, H - 1);
-fillBlocked(W - 2, 0, W - 1, H - 1);
+// 1. Perimeter borders (3 tiles thick solid border)
+fillBlocked(0, 0, W - 1, 2);
+fillBlocked(0, H - 3, W - 1, H - 1);
+fillBlocked(0, 0, 2, H - 1);
+fillBlocked(W - 3, 0, W - 1, H - 1);
 
-// 2. City Buildings (Left: cols 2..39)
-fillBlocked(4, 4, 18, 16);
-fillBlocked(22, 4, 36, 16);
-fillBlocked(4, 22, 18, 32);
-fillBlocked(22, 22, 36, 32);
-fillBlocked(4, 38, 18, 50);
-fillBlocked(22, 38, 36, 50);
-fillBlocked(4, 56, 14, 68);
-fillBlocked(24, 56, 36, 68);
+// 2. City District (Left: cols 3..42)
+fillBlocked(3, 3, 18, 18);
+fillBlocked(23, 3, 36, 18);
+fillBlocked(3, 22, 18, 33);
+fillBlocked(23, 22, 36, 26);
+fillBlocked(3, 40, 18, 68);
+// Block the central city building complex & rooftop completely
+fillBlocked(23, 30, 36, 55);
+fillBlocked(23, 58, 36, 68);
 
-// 3. Jungle / Mountains (Center: cols 42..77)
-fillBlocked(44, 4, 56, 20);
-fillBlocked(64, 4, 76, 20);
-fillBlocked(44, 52, 56, 68);
-fillBlocked(64, 52, 76, 68);
+// 3. Central Jungle / Mountains (Middle: cols 43..78)
+fillBlocked(43, 3, 56, 24);
+fillBlocked(62, 3, 78, 24);
+fillBlocked(43, 48, 56, 68);
+fillBlocked(62, 48, 78, 69);
 
-// 4. Wasteland / Refinery (Top Right: cols 80..116)
-fillBlocked(82, 4, 94, 18);
-fillBlocked(104, 4, 116, 18);
-fillBlocked(82, 24, 94, 36);
+// 4. Wasteland / Refinery (Top Right: cols 79..116)
+fillBlocked(79, 3, 93, 20);
+fillBlocked(102, 3, 116, 20);
+fillBlocked(79, 21, 93, 34);
+fillBlocked(102, 21, 116, 34);
 
-// 5. Dock / Cargo Yard (Bottom Right: cols 80..116)
-fillBlocked(104, 24, 116, 44);
-fillBlocked(82, 44, 96, 56);
-fillBlocked(82, 62, 96, 68);
-fillBlocked(106, 62, 116, 68);
+// 5. Dock / Cargo Yard (Bottom Right: cols 79..116)
+fillBlocked(102, 36, 116, 52);
+fillBlocked(79, 42, 95, 54);
+fillBlocked(79, 60, 95, 68);
+fillBlocked(104, 54, 116, 68);
 
-// 6. Ensure all pathways, portals, spawn, signs, and NPC areas are clearly walkable
-// Center Jungle Clearing & Spawn (col 60, row 36 -> x: 960, y: 576)
-clearWalkable(54, 30, 68, 44);
-// Horizontal thoroughfare connecting City, Jungle, and Refinery/Docks
-clearWalkable(2, 33, 117, 39);
-// Vertical street in city
-clearWalkable(18, 2, 22, 69);
-clearWalkable(36, 2, 42, 69);
-// Data Hub area (col 14..20, row 54..60) -> Chain Snake Portal
-clearWalkable(14, 54, 22, 60);
-// Refinery Gate area (col 94..100, row 10..16) -> Block Flyer Portal
-clearWalkable(94, 10, 102, 16);
-// Dock / Cargo Yard area (col 98..104, row 58..64) -> Vault Run Portal
-clearWalkable(98, 58, 104, 64);
+// 6. Walkways & Open Corridors
+clearWalkable(56, 26, 64, 46); // Central jungle clearing
+clearWalkable(37, 24, 78, 30); // Main gateway connecting City to Jungle
+clearWalkable(2, 26, 42, 30);  // City main street
+clearWalkable(18, 26, 22, 68); // Data Hub street
+clearWalkable(37, 26, 42, 68); // Lower market street
+clearWalkable(14, 54, 22, 60); // Chain Snake Portal area
+clearWalkable(94, 10, 101, 24); // Block Flyer Portal area
+clearWalkable(96, 36, 103, 65); // Vault Run Portal area
 
 let nextObjId = 1;
 function makeObj(layerData) {
@@ -189,11 +185,11 @@ const portals = [
 ];
 
 const npcConfigs = [
-  { id: 1, x: 448, y: 576 },
+  { id: 1, x: 320, y: 512 },
   { id: 2, x: 640, y: 768 },
   { id: 3, x: 704, y: 448 },
-  { id: 4, x: 1408, y: 576 },
-  { id: 5, x: 1664, y: 832 }
+  { id: 4, x: 1536, y: 640 },
+  { id: 5, x: 1600, y: 832 }
 ];
 
 const npcLayers = npcConfigs.map((npc, idx) => ({
