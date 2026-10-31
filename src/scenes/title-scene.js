@@ -136,6 +136,11 @@ export class TitleScene extends BaseScene {
 
     // play background music
     playBackgroundMusic(this, AUDIO_ASSET_KEYS.TITLE);
+
+    // D key to open Debug Assets Scene
+    this.input.keyboard.on('keydown-D', () => {
+      this.scene.start(SCENE_KEYS.DEBUG_ASSETS_SCENE);
+    });
   }
 
   /**

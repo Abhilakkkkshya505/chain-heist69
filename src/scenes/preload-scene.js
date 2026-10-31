@@ -24,6 +24,7 @@ import { dataManager } from '../utils/data-manager.js';
 import { SHOW_SOCIAL_LINKS } from '../config.js';
 import { BaseScene } from './base-scene.js';
 import { setGlobalSoundSettings } from '../utils/audio-utils.js';
+import { BITHUNTER_ASSETS } from '../assets/bithunter-asset-keys.js';
 
 export class PreloadScene extends BaseScene {
   constructor() {
@@ -240,6 +241,12 @@ export class PreloadScene extends BaseScene {
     this.load.audio(AUDIO_ASSET_KEYS.GRASS, '03_Step_grass_03.wav');
     this.load.audio(AUDIO_ASSET_KEYS.ICE, '13_Ice_explosion_01.wav');
     this.load.audio(AUDIO_ASSET_KEYS.FLEE, '51_Flee_02.wav');
+
+    // Reset base path before loading Bit-Hunter 2099 assets
+    this.load.setPath('');
+    BITHUNTER_ASSETS.forEach(({ key, path }) => {
+      this.load.image(key, path);
+    });
   }
 
   /**
@@ -247,6 +254,13 @@ export class PreloadScene extends BaseScene {
    */
   create() {
     super.create();
+
+    // Ensure pixel art texture filtering for all Bit-Hunter textures
+    BITHUNTER_ASSETS.forEach(({ key }) => {
+      if (this.textures.exists(key)) {
+        this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+    });
 
     // create animations from json file
     this.#createAnimations();
