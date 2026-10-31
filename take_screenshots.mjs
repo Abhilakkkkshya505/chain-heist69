@@ -15,15 +15,22 @@ import path from 'path';
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'networkidle' });
 
-  // Wait 4 seconds for assets to load and title scene to render
-  await page.waitForTimeout(4000);
+  // Wait 3.5 seconds for assets to load and title scene to render
+  await page.waitForTimeout(3500);
   
   const titlePath = path.resolve('docs/title_screen.png');
   await page.screenshot({ path: titlePath });
   console.log('Title screen captured to:', titlePath);
 
-  // Press SPACE to start new game -> WorldScene
-  await page.keyboard.press('Space');
+  // Click canvas to focus and hold Space to start New Game -> WorldScene
+  console.log('Starting new game...');
+  await page.locator('canvas').click();
+  await page.waitForTimeout(100);
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(150);
+  await page.keyboard.up('Space');
+
+  // Wait for fade-out and fade-in to WorldScene
   await page.waitForTimeout(3000);
 
   const worldPath = path.resolve('docs/world_scene.png');
@@ -45,7 +52,7 @@ import path from 'path';
 
   // Walk around the map with arrow keys
   console.log('Walking around Neo-City...');
-  // Walk Left
+  // Walk Left towards city
   for (let i = 0; i < 4; i++) {
     await page.keyboard.press('ArrowLeft');
     await page.waitForTimeout(350);
@@ -56,12 +63,12 @@ import path from 'path';
     await page.waitForTimeout(350);
   }
   // Walk Right
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(350);
   }
   // Walk Up
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(350);
   }

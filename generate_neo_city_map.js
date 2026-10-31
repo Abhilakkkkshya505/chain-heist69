@@ -514,3 +514,4 @@ ${coins.map(xmlObj).join('')} </objectgroup>
 
 fs.writeFileSync('assets/data/neo-city.tmx', tmx);
 console.log('Successfully wrote assets/data/neo-city.tmx');
+
