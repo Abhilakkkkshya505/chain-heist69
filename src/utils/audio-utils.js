@@ -11,6 +11,10 @@ export function playBackgroundMusic(scene, audioKey) {
     return;
   }
 
+  if (!scene.cache.audio.has(audioKey)) {
+    return;
+  }
+
   // get all of the audio objects that are currently playing so we can check if the sound we
   // want to play is already playing, and to stop all other sounds
   const existingSounds = scene.sound.getAllPlaying();
@@ -38,6 +42,10 @@ export function playBackgroundMusic(scene, audioKey) {
  */
 export function playSoundFx(scene, audioKey) {
   if (dataManager.store.get(DATA_MANAGER_STORE_KEYS.OPTIONS_SOUND) !== SOUND_OPTIONS.ON) {
+    return;
+  }
+
+  if (!scene.cache.audio.has(audioKey)) {
     return;
   }
 

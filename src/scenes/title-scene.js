@@ -69,18 +69,31 @@ export class TitleScene extends BaseScene {
     this.#selectedMenuOption = MAIN_MENU_OPTIONS.NEW_GAME;
     this.#isContinueButtonEnabled = dataManager.store.get(DATA_MANAGER_STORE_KEYS.GAME_STARTED) || false;
 
-    // create title scene background
+    // 1. Original Monster Tamer title scene background
     this.add.image(0, 0, TITLE_ASSET_KEYS.BACKGROUND).setOrigin(0).setScale(0.58);
     this.add
       .image(this.scale.width / 2, 150, TITLE_ASSET_KEYS.PANEL)
       .setScale(0.25, 0.25)
       .setAlpha(0.5);
-    this.add
-      .image(this.scale.width / 2, 150, TITLE_ASSET_KEYS.TITLE)
-      .setScale(0.55)
-      .setAlpha(0.5);
 
-    // create menu
+    // 2. Title replacement: "CHAIN HEIST" matching original style & position
+    this.add.text(this.scale.width / 2, 150, 'CHAIN HEIST', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '52px',
+      color: '#36393B',
+      fontStyle: 'bold',
+      stroke: '#1A1C1D',
+      strokeThickness: 4,
+      shadow: {
+        offsetX: 2,
+        offsetY: 2,
+        color: '#000000',
+        blur: 6,
+        fill: true,
+      },
+    }).setOrigin(0.5).setAlpha(0.65);
+
+    // 3. Original translucent nine-slice menu
     const menuBgWidth = 500;
     const menuBgContainer = this.#nineSliceMenu.createNineSliceContainer(
       this,
@@ -89,6 +102,10 @@ export class TitleScene extends BaseScene {
       UI_ASSET_KEYS.MENU_BACKGROUND
     );
     const newGameText = this.add.text(menuBgWidth / 2, 40, 'New Game', MENU_TEXT_STYLE).setOrigin(0.5);
+    newGameText.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.cameras.main.fadeOut(500, 0, 0, 0);
+      this._controls.lockInput = true;
+    });
     const continueText = this.add.text(menuBgWidth / 2, 90, 'Continue', MENU_TEXT_STYLE).setOrigin(0.5);
     if (!this.#isContinueButtonEnabled) {
       continueText.setAlpha(0.5);
@@ -97,7 +114,7 @@ export class TitleScene extends BaseScene {
     const menuContainer = this.add.container(0, 0, [menuBgContainer, newGameText, continueText, optionText]);
     menuContainer.setPosition(this.scale.width / 2 - menuBgWidth / 2, 300);
 
-    // create cursors
+    // 4. Original dark cursor
     this.#mainMenuCursorPhaserImageGameObject = this.add
       .image(PLAYER_INPUT_CURSOR_POSITION.x, PLAYER_INPUT_CURSOR_POSITION.y, UI_ASSET_KEYS.CURSOR)
       .setOrigin(0.5)
@@ -129,18 +146,23 @@ export class TitleScene extends BaseScene {
 
       if (this.#selectedMenuOption === MAIN_MENU_OPTIONS.NEW_GAME) {
         dataManager.startNewGame();
+        this.scene.start(SCENE_KEYS.HUNTER_CHOICE_SCENE);
+        return;
       }
 
-      this.scene.start(SCENE_KEYS.WORLD_SCENE);
+      if (this.#selectedMenuOption === MAIN_MENU_OPTIONS.CONTINUE) {
+        dataManager.loadData();
+        this.scene.start(SCENE_KEYS.WORLD_SCENE);
+        return;
+      }
+
+      exhaustiveGuard(this.#selectedMenuOption);
     });
 
-    // play background music
-    playBackgroundMusic(this, AUDIO_ASSET_KEYS.TITLE);
-
-    // D key to open Debug Assets Scene
-    this.input.keyboard.on('keydown-D', () => {
-      this.scene.start(SCENE_KEYS.DEBUG_ASSETS_SCENE);
-    });
+    const isMusicPlaying = this.sound.getAllPlaying().some((s) => s.key === AUDIO_ASSET_KEYS.TITLE);
+    if (!isMusicPlaying) {
+      playBackgroundMusic(this, AUDIO_ASSET_KEYS.TITLE);
+    }
   }
 
   /**
@@ -153,7 +175,7 @@ export class TitleScene extends BaseScene {
       return;
     }
 
-    const wasSpaceKeyPressed = this._controls.wasSpaceKeyPressed();
+    const wasSpaceKeyPressed = this._controls.wasSpaceKeyPressed() || this._controls.wasEnterKeyPressed();
     if (wasSpaceKeyPressed) {
       this.cameras.main.fadeOut(500, 0, 0, 0);
       this._controls.lockInput = true;

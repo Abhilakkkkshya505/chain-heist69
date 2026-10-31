@@ -35,6 +35,8 @@ import {
   TILED_NPC_PROPERTY,
   TILED_SIGN_PROPERTY,
 } from '../assets/tiled-keys.js';
+import { KENNEY_FUTURE_NARROW_FONT_NAME } from '../assets/font-keys.js';
+import { runState, isReduceMotionActive } from '../state/run-state.js';
 
 /**
  * @typedef WorldSceneData
@@ -97,11 +99,85 @@ export class WorldScene extends BaseScene {
   #cameraRegions;
   /** @type {{ [key: string]: Phaser.Tilemaps.Tilemap}} */
   #tiledLevelMaps;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #hudContainer;
+  /** @type {Phaser.GameObjects.Text[]} */
+  #hudHeartTexts = [];
+  /** @type {Phaser.GameObjects.Text} */
+  #hudScoreText;
+  /** @type {Phaser.GameObjects.Text[]} */
+  #hudPortalTexts = [];
+  /** @type {Phaser.GameObjects.Text} */
+  #hudTimerText;
+  /** @type {boolean} */
+  #isGamePaused = false;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #pauseMenuContainer;
+  /** @type {Phaser.GameObjects.Text[]} */
+  #pauseOptionTexts = [];
+  /** @type {number} */
+  #selectedPauseOption = 0;
+  /** @type {any[]} */
+  #portals = [];
+  /** @type {any[]} */
+  #hackerApes = [];
+  /** @type {boolean} */
+  #isEngagingPortal = false;
+  /** @type {any[]} */
+  #coins = [];
+  /** @type {any[]} */
+  #tokens = [];
+  /** @type {Set<number>} */
+  #collectedTokenIds = new Set();
+  /** @type {Phaser.GameObjects.Text} */
+  #hudTokensText;
+  /** @type {boolean} */
+  #isGuideTrailEnabled = true;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #guideTrailContainer;
+  /** @type {number} */
+  #lastGuideTrailCalcTime = 0;
+  /** @type {number} */
+  #lastCatAfterimageTime = 0;
+  /** @type {number} */
+  #lastCatParticleTime = 0;
+  /** @type {Phaser.GameObjects.Image[]} */
+  #activeAfterimages = [];
+  /** @type {boolean} */
+  #catParticleColorToggle = false;
+  /** @type {Phaser.GameObjects.Particles.ParticleEmitter | undefined} */
+  #catTrailEmitter;
+  /** @type {Phaser.Tilemaps.TilemapLayer | undefined} */
+  #collisionLayerRef;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #minimapContainer;
+  /** @type {Phaser.GameObjects.Arc | undefined} */
+  #minimapPlayerDot;
+  /** @type {Array<{ id: number, marker: Phaser.GameObjects.Arc, glow: Phaser.GameObjects.Arc }>} */
+  #minimapPortalMarkers = [];
+  /** @type {boolean} */
+  #isBigMapOpen = false;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #bigMapContainer;
+  /** @type {Phaser.GameObjects.Container | undefined} */
+  #bigMapDynamicLayer;
 
   constructor() {
     super({
       key: SCENE_KEYS.WORLD_SCENE,
     });
+  }
+
+  get player() {
+    return this.#player;
+  }
+
+  get coins() {
+    return this.#coins;
+  }
+
+  get tokens() {
+    return this.#tokens;
   }
 
   /**
@@ -112,6 +188,26 @@ export class WorldScene extends BaseScene {
     super.init(data);
     this.#sceneData = data;
     this.#tiledLevelMaps = {};
+    this.#portals = [];
+    this.#hackerApes = [];
+    this.#isEngagingPortal = false;
+    this.#coins = [];
+    this.#tokens = [];
+    this.#collectedTokenIds = new Set(runState.collectedTokenIds || []);
+    this.#isGuideTrailEnabled = true;
+    this.#lastGuideTrailCalcTime = 0;
+    this.#lastCatAfterimageTime = 0;
+    this.#lastCatParticleTime = 0;
+    this.#activeAfterimages = [];
+    this.#catParticleColorToggle = false;
+    this.#minimapPortalMarkers = [];
+    this.#isBigMapOpen = false;
+
+    runState.load();
+    if (runState.cleared.length >= 3 || runState.lives <= 0) {
+      this.scene.start(SCENE_KEYS.RESULTS_SCENE);
+      return;
+    }
 
     // handle when some of the fields for scene data are not populated, default to values provided, otherwise use safe defaults
     /** @type {string} */
@@ -223,6 +319,7 @@ export class WorldScene extends BaseScene {
     }
     // Hide the collision layer
     collisionLayer.setAlpha(0).setDepth(2).setVisible(false);
+    this.#collisionLayerRef = collisionLayer;
 
     // F1 toggles a red overlay of the collision tiles
     const collisionDebugGfx = this.add.graphics().setDepth(100);
@@ -271,54 +368,39 @@ export class WorldScene extends BaseScene {
       this.cameras.main.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
     }
     this.cameras.main.setZoom(0.8);
+    this.cameras.main.setRoundPixels(true);
+
+    // Particle emitter texture for walking trail
+    if (!this.textures.exists('trail-pixel-2x2')) {
+      const pGfx = this.make.graphics({ x: 0, y: 0, add: false });
+      pGfx.fillStyle(0xFFFFFF, 1);
+      pGfx.fillRect(0, 0, 2, 2);
+      pGfx.generateTexture('trail-pixel-2x2', 2, 2);
+      pGfx.destroy();
+    }
+
+    this.#catTrailEmitter = this.add.particles(0, 0, 'trail-pixel-2x2', {
+      lifespan: 400,
+      alpha: { start: 0.9, end: 0 },
+      scale: 1,
+      emitting: false,
+      maxAliveParticles: 20,
+    }).setDepth(5);
 
     // draw the image layer at depth 0 with pixel-art scaling
     const bgKey = this.textures.exists('neo-city') ? 'neo-city' : `${this.#sceneData.area.toUpperCase()}_BACKGROUND`;
     const bgImage = this.add.image(0, 0, bgKey, 0).setOrigin(0).setDepth(0);
     if (bgImage && bgImage.texture) {
       bgImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      // Night colour grade: tint world towards dark navy + violet
+      bgImage.setTint(0xA698D8);
     }
 
-    // for now, draw the Portals as glowing circles and ignore Tokens/Coins
-    const portalsLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.PORTALS);
-    if (portalsLayer && portalsLayer.objects) {
-      portalsLayer.objects.forEach((obj) => {
-        const cx = obj.x + (obj.width ? obj.width / 2 : 0);
-        const cy = obj.y + (obj.height ? obj.height / 2 : 0);
+    // Create portals as glowing neon rings and spawn Hacker Ape trainers next to each
+    this.#createPortalsAndApes(map);
 
-        const portalGfx = this.add.graphics().setDepth(5);
-        portalGfx.fillStyle(0x00ffff, 0.25);
-        portalGfx.fillCircle(cx, cy, 32);
-        portalGfx.fillStyle(0x00ff88, 0.45);
-        portalGfx.fillCircle(cx, cy, 22);
-        portalGfx.fillStyle(0xffffff, 0.9);
-        portalGfx.fillCircle(cx, cy, 12);
-
-        this.tweens.add({
-          targets: portalGfx,
-          alpha: { from: 0.6, to: 1.0 },
-          scaleX: { from: 0.95, to: 1.05 },
-          scaleY: { from: 0.95, to: 1.05 },
-          duration: 900,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-        });
-
-        const gameName = obj.properties?.find((p) => p.name === 'game')?.value || obj.name;
-        this.add
-          .text(cx, cy - 42, `[ ${gameName.toUpperCase()} ]`, {
-            fontFamily: 'monospace',
-            fontSize: '12px',
-            fontStyle: 'bold',
-            color: '#00ffff',
-            stroke: '#000000',
-            strokeThickness: 3,
-          })
-          .setOrigin(0.5)
-          .setDepth(6);
-      });
-    }
+    // Create Coins and Tokens
+    this.#createCoinsAndTokens(map);
 
     // create items and collisions
     this.#createItems(map);
@@ -397,14 +479,137 @@ export class WorldScene extends BaseScene {
     this.scene.launch(SCENE_KEYS.DIALOG_SCENE);
     this.#dialogUi = /** @type {DialogScene} */ (this.scene.get(SCENE_KEYS.DIALOG_SCENE));
     this.#specialEncounterTileImageGameObjectGroup = this.add.group({ classType: Phaser.GameObjects.Image });
+
+    runState.load();
+    runState.startTimer();
+    this.#createRunHud();
+    this.#createPauseMenu();
+
+    // Create Minimap (top-right ~160px wide, cyan neon border, dark frame)
+    this.#createMinimap();
+
+    // Create Big Map View (centered dialog, toggled with M)
+    this.#createBigMap();
+
+    // Create Guide Trail
+    this.#createGuideTrail();
+
+    // Cyberpunk visual polish: night colour grade, player glow, floating neon particles, scanlines
+    this.#createCyberpunkPolish(map);
+
+    // T toggles guide trail
+    this.input.keyboard?.on('keydown-T', () => {
+      this.#toggleGuideTrail();
+    });
+
+    // M toggles big centred map view (pauses game while open)
+    this.input.keyboard?.on('keydown-M', () => {
+      if (this.#dialogUi?.isVisible || this.#menu?.isVisible || this.#isGamePaused) {
+        return;
+      }
+      this.#toggleBigMap();
+    });
+
+    // R toggles reduce motion
+    this.input.keyboard?.on('keydown-R', () => {
+      runState.toggleReduceMotion();
+      this.#updateGuideTrail();
+    });
+
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.#isBigMapOpen) {
+        this.#toggleBigMap();
+        return;
+      }
+      this.#togglePauseMenu();
+    });
+
+    this.input.keyboard?.on('keydown-W', () => {
+      if (this.#isGamePaused) {
+        this.#selectedPauseOption = 0;
+        this.#updatePauseMenuUI();
+      }
+    });
+
+    this.input.keyboard?.on('keydown-S', () => {
+      if (this.#isGamePaused) {
+        this.#selectedPauseOption = 1;
+        this.#updatePauseMenuUI();
+      }
+    });
   }
 
   /**
    * @param {DOMHighResTimeStamp} time
+   * @param {number} [delta=16.66]
    * @returns {void}
    */
-  update(time) {
+  update(time, delta = 16.66) {
     super.update(time);
+
+    // Pause timer when a dialog, world menu, pause menu, or big map is active
+    const isDialogActive = Boolean(this.#dialogUi?.isVisible);
+    const isMenuActive = Boolean(this.#menu?.isVisible);
+    const isPaused = this.#isGamePaused || this.#isBigMapOpen || isDialogActive || isMenuActive;
+
+    if (isPaused) {
+      runState.pauseTimer();
+    } else {
+      runState.resumeTimer();
+      const deltaSec = delta / 1000;
+      const timeExpired = runState.tick(deltaSec);
+      if (timeExpired) {
+        this.scene.start(SCENE_KEYS.RESULTS_SCENE);
+        return;
+      }
+    }
+
+    this.#updateRunHud(time);
+    this.#updateMinimap();
+
+    if (this.#isBigMapOpen) {
+      return;
+    }
+
+    if (!isPaused) {
+      this.#checkCoinCollection();
+
+      // Guide trail update check
+      if (this.#isGuideTrailEnabled && !isReduceMotionActive()) {
+        if (time - this.#lastGuideTrailCalcTime > 300) {
+          this.#lastGuideTrailCalcTime = time;
+          this.#updateGuideTrail();
+        }
+      } else if (this.#guideTrailContainer && this.#guideTrailContainer.visible) {
+        this.#guideTrailContainer.setVisible(false);
+      }
+
+      // Cat walking trail (afterimage + pixel particles)
+      if (this.#player && this.#player.isMoving && !isReduceMotionActive()) {
+        this.#spawnCatWalkTrail(time);
+      }
+    }
+
+    if (this.#isGamePaused) {
+      const dirPressed = this._controls.getDirectionKeyJustPressed();
+      if (dirPressed === DIRECTION.UP) {
+        this.#selectedPauseOption = 0;
+        this.#updatePauseMenuUI();
+      } else if (dirPressed === DIRECTION.DOWN) {
+        this.#selectedPauseOption = 1;
+        this.#updatePauseMenuUI();
+      }
+
+      if (this._controls.wasSpaceKeyPressed() || this._controls.wasEnterKeyPressed()) {
+        this.#executePauseOption();
+      }
+      return;
+    }
+
+    // Check line of sight (4 tiles) or interaction with Hacker Apes
+    if (!this.#isGamePaused && !this.#isEngagingPortal && this.#player && !this.#player.isMoving) {
+      this.#checkApeLineOfSightAndInteraction();
+    }
 
     if (this.#wildMonsterEncountered) {
       this.#player.update(time);
@@ -508,6 +713,1597 @@ export class WorldScene extends BaseScene {
   }
 
   /**
+   * Builds the fixed HUD overlay displaying Hearts, Score, 3 Portals, and Countdown Timer.
+   * @returns {void}
+   */
+  #createRunHud() {
+    this.#hudContainer = this.add.container(16, 14);
+    this.#hudContainer.setScrollFactor(0).setDepth(9999);
+
+    const hudWidth = 730;
+    const hudHeight = 44;
+
+    // Dark panel with cyan border
+    const panelBg = this.add.rectangle(0, 0, hudWidth, hudHeight, 0x080416, 0.92)
+      .setOrigin(0)
+      .setStrokeStyle(2, 0x3FF0FF, 0.95);
+
+    // Inner subtle glow accent
+    const innerBar = this.add.rectangle(2, hudHeight - 3, hudWidth - 4, 2, 0x3FF0FF, 0.35)
+      .setOrigin(0);
+
+    // 1. Hearts
+    this.#hudHeartTexts = [];
+    for (let i = 0; i < 3; i++) {
+      const heart = this.add.text(18 + i * 22, hudHeight / 2, '♥', {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '22px',
+        color: '#FF2A6D',
+      }).setOrigin(0, 0.5);
+      this.#hudHeartTexts.push(heart);
+    }
+
+    // Divider 1
+    const div1 = this.add.graphics();
+    div1.lineStyle(1, 0x3FF0FF, 0.4);
+    div1.lineBetween(90, 8, 90, hudHeight - 8);
+
+    // 2. Score
+    this.#hudScoreText = this.add.text(104, hudHeight / 2, 'SCORE 000000', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '15px',
+      color: '#FFD700',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+
+    // Divider 2
+    const div2 = this.add.graphics();
+    div2.lineStyle(1, 0x3FF0FF, 0.4);
+    div2.lineBetween(248, 8, 248, hudHeight - 8);
+
+    // 3. Tokens Count x/10
+    this.#hudTokensText = this.add.text(262, hudHeight / 2, 'TOKENS 0/10', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '14px',
+      color: '#00E5FF',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+
+    // Divider 3
+    const div3 = this.add.graphics();
+    div3.lineStyle(1, 0x3FF0FF, 0.4);
+    div3.lineBetween(386, 8, 386, hudHeight - 8);
+
+    // 4. 3 Portal Markers: grey -> green when cleared
+    const portalLabel = this.add.text(400, hudHeight / 2, 'PORTALS:', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '12px',
+      color: '#8E8AAB',
+    }).setOrigin(0, 0.5);
+
+    this.#hudPortalTexts = [];
+    const portalTags = ['[1]', '[2]', '[3]'];
+    portalTags.forEach((tag, idx) => {
+      const pText = this.add.text(472 + idx * 38, hudHeight / 2, tag, {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '15px',
+        color: '#666677',
+        fontStyle: 'bold',
+      }).setOrigin(0, 0.5);
+      this.#hudPortalTexts.push(pText);
+    });
+
+    // Divider 4
+    const div4 = this.add.graphics();
+    div4.lineStyle(1, 0x3FF0FF, 0.4);
+    div4.lineBetween(604, 8, 604, hudHeight - 8);
+
+    // 5. Timer
+    this.#hudTimerText = this.add.text(624, hudHeight / 2, '⏱ 07:00', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '19px',
+      color: '#3FF0FF',
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+
+    this.#hudContainer.add([
+      panelBg,
+      innerBar,
+      ...this.#hudHeartTexts,
+      div1,
+      this.#hudScoreText,
+      div2,
+      this.#hudTokensText,
+      div3,
+      portalLabel,
+      ...this.#hudPortalTexts,
+      div4,
+      this.#hudTimerText,
+    ]);
+  }
+
+  /**
+   * Refreshes HUD values every frame
+   * @param {number} time
+   * @returns {void}
+   */
+  #updateRunHud(time) {
+    if (!this.#hudContainer) return;
+
+    // 1. Hearts
+    const lives = Math.max(0, Math.min(3, runState.lives));
+    for (let i = 0; i < 3; i++) {
+      if (i < lives) {
+        this.#hudHeartTexts[i].setColor('#FF2A6D').setAlpha(1);
+      } else {
+        this.#hudHeartTexts[i].setColor('#3A284C').setAlpha(0.6);
+      }
+    }
+
+    // 2. Score
+    this.#hudScoreText.setText(`SCORE ${String(runState.score).padStart(6, '0')}`);
+
+    // 3. Tokens Count
+    if (this.#hudTokensText) {
+      this.#hudTokensText.setText(`TOKENS ${runState.tokensFound}/10`);
+    }
+
+    // 4. Portal markers (grey -> green when cleared)
+    for (let i = 0; i < 3; i++) {
+      const portalId = i + 1;
+      const isCleared = runState.cleared.includes(portalId);
+      this.#hudPortalTexts[i].setColor(isCleared ? '#00FF66' : '#666677');
+    }
+
+    // 4. Timer (turns red and flickers under 1:00)
+    const timeFormatted = runState.getFormattedTime();
+    this.#hudTimerText.setText(`⏱ ${timeFormatted}`);
+
+    if (runState.timeRemaining < 60) {
+      this.#hudTimerText.setColor('#FF3366');
+      const isFlickerDim = Math.floor(time / 200) % 2 === 0;
+      this.#hudTimerText.setAlpha(isFlickerDim ? 0.25 : 1);
+    } else {
+      this.#hudTimerText.setColor('#3FF0FF');
+      this.#hudTimerText.setAlpha(1);
+    }
+  }
+
+  /**
+   * Draws the portals as glowing neon rotating rings with floating labels,
+   * and spawns a Hacker Ape trainer next to each portal.
+   * @param {Phaser.Tilemaps.Tilemap} map
+   * @returns {void}
+   */
+  #createPortalsAndApes(map) {
+    const portalsLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.PORTALS);
+    if (!portalsLayer || !portalsLayer.objects) return;
+
+    this.#portals = [];
+    this.#hackerApes = [];
+
+    const portalMeta = {
+      blockFlyer: {
+        id: 1,
+        label: 'BLOCK FLYER',
+        district: 'BLOCK DISTRICT',
+        apeAsset: 'HACKER_APE_1',
+        apeOffsetX: -64,
+        apeOffsetY: 0,
+        taunt: "HACKER APE: Think your ping is fast enough for the BLOCK FLYER? You're about to get liquidated!",
+      },
+      vaultRun: {
+        id: 2,
+        label: 'VAULT RUN',
+        district: 'VAULT DISTRICT',
+        apeAsset: 'HACKER_APE_2',
+        apeOffsetX: -64,
+        apeOffsetY: 0,
+        taunt: "HACKER APE: Private keys stay private! You'll never crack the VAULT RUN protocol!",
+      },
+      chainSnake: {
+        id: 3,
+        label: 'CHAIN SNAKE',
+        district: 'CHAIN SNAKE',
+        apeAsset: 'HACKER_APE_3',
+        apeOffsetX: 64,
+        apeOffsetY: 0,
+        taunt: "HACKER APE: Sssnakesss on the blockchain! My CHAIN SNAKE will choke your gas fees!",
+      },
+    };
+
+    portalsLayer.objects.forEach((obj) => {
+      const gameProp = obj.properties?.find((p) => p.name === 'game')?.value || obj.name;
+      const meta = portalMeta[gameProp] || portalMeta.blockFlyer;
+      const portalId = meta.id;
+      const isCleared = runState.cleared.includes(portalId);
+
+      const cx = obj.x + (obj.width ? obj.width / 2 : 32);
+      const cy = obj.y + (obj.height ? obj.height / 2 : 32);
+
+      // 1. Draw glowing neon ring (rotating, pulsing)
+      const ringContainer = this.add.container(cx, cy).setDepth(6);
+      const ringColor = isCleared ? 0x00FF66 : 0x00E5FF;
+      const ringColorHex = isCleared ? '#00FF66' : '#3FF0FF';
+
+      // Outer glow pulse circle
+      const outerGlow = this.add.graphics();
+      outerGlow.fillStyle(ringColor, 0.18);
+      outerGlow.fillCircle(0, 0, 34);
+      outerGlow.lineStyle(3, ringColor, 0.85);
+      outerGlow.strokeCircle(0, 0, 30);
+
+      // Rotating dashed ring segments
+      const segmentGraphics = this.add.graphics();
+      segmentGraphics.lineStyle(2, ringColor, 0.95);
+      for (let a = 0; a < 4; a++) {
+        const startRad = Phaser.Math.DegToRad(a * 90 + 10);
+        const endRad = Phaser.Math.DegToRad(a * 90 + 75);
+        segmentGraphics.beginPath();
+        segmentGraphics.arc(0, 0, 20, startRad, endRad, false);
+        segmentGraphics.strokePath();
+      }
+
+      // Inner glowing core
+      const core = this.add.circle(0, 0, 9, ringColor, 0.6);
+
+      ringContainer.add([outerGlow, segmentGraphics, core]);
+      if (ringContainer.postFX) {
+        ringContainer.postFX.addGlow(ringColor, 3, 1, false, 0.1, 12);
+      }
+
+      // Pulsing tween
+      this.tweens.add({
+        targets: outerGlow,
+        scaleX: { from: 0.9, to: 1.15 },
+        scaleY: { from: 0.9, to: 1.15 },
+        alpha: { from: 0.6, to: 1 },
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      // Rotating tween
+      this.tweens.add({
+        targets: segmentGraphics,
+        angle: 360,
+        duration: 3000,
+        repeat: -1,
+      });
+
+      // Floating label
+      const floatingLabel = this.add.text(cx, cy - 42, meta.label, {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '13px',
+        color: ringColorHex,
+        fontStyle: 'bold',
+        stroke: '#040a18',
+        strokeThickness: 3,
+      }).setOrigin(0.5).setDepth(8);
+
+      this.tweens.add({
+        targets: floatingLabel,
+        y: cy - 48,
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      // 2. Spawn Hacker Ape trainer NPC next to portal
+      const apeX = cx + meta.apeOffsetX;
+      const apeY = cy + meta.apeOffsetY;
+
+      // If already cleared, step aside
+      const finalApeX = isCleared ? apeX + 48 : apeX;
+      const finalApeY = isCleared ? apeY - 48 : apeY;
+      const feetX = finalApeX;
+      const feetY = finalApeY + 30;
+
+      // Soft oval shadow under character: ~28x8 px, black at 35% opacity
+      const apeShadow = this.add.ellipse(feetX, feetY, 28, 8, 0x000000, isCleared ? 0.2 : 0.35)
+        .setDepth(4);
+
+      // Ape guard: ~48-52 px tall (31x50 px), crisp pixelArt, feet on tile
+      const apeSprite = this.add.image(feetX, feetY, meta.apeAsset)
+        .setOrigin(0.5, 1.0)
+        .setDisplaySize(31, 50)
+        .setDepth(7);
+
+      if (apeSprite.texture) {
+        apeSprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+
+      if (isCleared) {
+        apeSprite.setAlpha(0.65);
+      } else if (!isReduceMotionActive()) {
+        // Idle bob tween: 3px up and down
+        this.tweens.add({
+          targets: apeSprite,
+          y: feetY - 3,
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+
+      const apeData = {
+        portalId: portalId,
+        game: gameProp,
+        districtName: meta.district,
+        label: meta.label,
+        taunt: meta.taunt,
+        sprite: apeSprite,
+        baseX: apeX,
+        baseY: apeY,
+        portalX: cx,
+        portalY: cy,
+        assetKey: meta.apeAsset,
+        isCleared: isCleared,
+      };
+
+      this.#hackerApes.push(apeData);
+      this.#portals.push({
+        id: portalId,
+        label: meta.label,
+        cx,
+        cy,
+        game: gameProp,
+        ringContainer,
+        floatingLabel,
+        isCleared,
+      });
+    });
+  }
+
+  /**
+   * Initializes Coins and Tokens from the map's object layers
+   * @param {Phaser.Tilemaps.Tilemap} map
+   * @returns {void}
+   */
+  #createCoinsAndTokens(map) {
+    this.#coins = [];
+    this.#tokens = [];
+
+    // 1. Coins Layer
+    const coinsLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.COINS);
+    if (coinsLayer && coinsLayer.objects) {
+      coinsLayer.objects.forEach((obj) => {
+        const cx = obj.x + 32;
+        const cy = obj.y + 32;
+
+        const coinContainer = this.add.container(cx, cy).setDepth(6);
+
+        // Small soft gold halo (~1.5x coin size, 25% opacity, pulsing gently)
+        const glow = this.add.circle(0, 0, 17, 0xFFD700, 0.25);
+        if (!isReduceMotionActive()) {
+          this.tweens.add({
+            targets: glow,
+            scale: { from: 0.92, to: 1.08 },
+            alpha: { from: 0.20, to: 0.28 },
+            duration: 1200,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+          });
+        }
+
+        // Gold coin sprite: ~22-24 px wide
+        const sprite = this.add.image(0, 0, 'coin-btc-gold').setDisplaySize(23, 23);
+        if (sprite.texture) {
+          sprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+        }
+
+        // Tiny white sparkle pixel (2x2 px) flashes every ~2-3s
+        const sparkle = this.add.rectangle(5, -5, 2, 2, 0xFFFFFF).setAlpha(0);
+
+        if (!isReduceMotionActive()) {
+          const scheduleSparkle = () => {
+            if (!coinContainer || !coinContainer.scene) return;
+            const interval = Phaser.Math.Between(2000, 3000);
+            this.time.delayedCall(interval, () => {
+              if (!coinContainer || !coinContainer.scene) return;
+              sparkle.setAlpha(1);
+              this.time.delayedCall(120, () => {
+                if (!sparkle || !sparkle.scene) return;
+                sparkle.setAlpha(0);
+                scheduleSparkle();
+              });
+            });
+          };
+          scheduleSparkle();
+        }
+
+        coinContainer.add([glow, sprite, sparkle]);
+        if (sprite.postFX) {
+          sprite.postFX.addGlow(0xFFD700, 2, 0, false, 0.1, 8);
+        }
+
+        // Keep the bob: 3 px up and down, ~1.4s loop, random phase per coin
+        if (!isReduceMotionActive()) {
+          this.tweens.add({
+            targets: coinContainer,
+            y: cy - 3,
+            duration: 700,
+            yoyo: true,
+            repeat: -1,
+            delay: Math.random() * 1400,
+            ease: 'Sine.easeInOut',
+          });
+        }
+
+        this.#coins.push({
+          id: obj.id,
+          name: obj.name,
+          x: cx,
+          y: cy,
+          container: coinContainer,
+          collected: false,
+        });
+      });
+    }
+
+    // 2. Tokens Layer (invisible)
+    const tokensLayer = map.getObjectLayer(OBJECT_LAYER_NAMES.TOKENS);
+    if (tokensLayer && tokensLayer.objects) {
+      tokensLayer.objects.forEach((obj) => {
+        this.#tokens.push({
+          id: obj.id,
+          name: obj.name,
+          tileX: obj.x,
+          tileY: obj.y,
+          centerX: obj.x + 32,
+          centerY: obj.y + 32,
+        });
+      });
+    }
+  }
+
+  /**
+   * Checks if player has walked over any uncollected coin
+   * @returns {void}
+   */
+  #checkCoinCollection() {
+    if (!this.#player || !this.#coins || this.#coins.length === 0) return;
+
+    const px = this.#player.sprite.x + 32;
+    const py = this.#player.sprite.y + 32;
+
+    for (let i = 0; i < this.#coins.length; i++) {
+      const coin = this.#coins[i];
+      if (coin.collected) continue;
+
+      const dist = Phaser.Math.Distance.Between(px, py, coin.x, coin.y);
+      if (dist < 36) {
+        this.#collectCoin(coin, i);
+      }
+    }
+  }
+
+  /**
+   * Collects a coin: +10 score, pop animation, particle burst, rising "+10" text, coin sound
+   * @param {object} coin
+   * @param {number} index
+   * @returns {void}
+   */
+  #collectCoin(coin, index) {
+    coin.collected = true;
+    runState.addScore(10);
+    this.#playCoinSound();
+
+    // 1. Scale to 1.4x and fade in 150 ms
+    this.tweens.add({
+      targets: coin.container,
+      scale: 1.4,
+      alpha: 0,
+      duration: 150,
+      ease: 'Power1',
+      onComplete: () => {
+        coin.container.destroy();
+      },
+    });
+
+    if (!isReduceMotionActive()) {
+      // 2. Burst 6 tiny gold pixel squares (2-3 px)
+      const colors = [0xFFD700, 0xFFE066, 0xFFCC00];
+      for (let p = 0; p < 6; p++) {
+        const angle = (p / 6) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const speed = 25 + Math.random() * 20;
+        const size = Phaser.Math.Between(2, 3);
+        const part = this.add.rectangle(
+          coin.x,
+          coin.y,
+          size,
+          size,
+          colors[p % colors.length],
+          1
+        ).setDepth(25);
+
+        this.tweens.add({
+          targets: part,
+          x: coin.x + Math.cos(angle) * speed,
+          y: coin.y + Math.sin(angle) * speed,
+          alpha: 0,
+          scale: 0.5,
+          duration: 250,
+          ease: 'Power2',
+          onComplete: () => part.destroy(),
+        });
+      }
+    }
+
+    // 3. "+10" in a small pixel font rising 20 px and fading
+    const text10 = this.add.text(coin.x, coin.y - 6, '+10', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '11px',
+      color: '#FFD700',
+      fontStyle: 'bold',
+      stroke: '#080416',
+      strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(30);
+
+    this.tweens.add({
+      targets: text10,
+      y: coin.y - 26,
+      alpha: { from: 1, to: 0 },
+      duration: 500,
+      ease: 'Power1',
+      onComplete: () => text10.destroy(),
+    });
+  }
+
+  /**
+   * Collects a hidden token: +50 score, dialog modal, pops out, hovers, flies to score
+   * @param {object} token
+   * @returns {void}
+   */
+  #collectToken(token) {
+    this.#collectedTokenIds.add(token.id);
+    runState.collectToken(token.id);
+    this.#playTokenSound();
+
+    // Show dialog modal
+    this.#dialogUi.showDialogModal(['You found a hidden BIT token!']);
+
+    // Spawn floating coin that pops out, hovers, and flies to the HUD score
+    const startX = token.centerX;
+    const startY = token.centerY;
+
+    const flyContainer = this.add.container(startX, startY).setDepth(10001);
+    const glow = this.add.circle(0, 0, 17, 0x00E5FF, 0.35);
+    const coinImg = this.add.image(0, 0, 'coin-btc-gold').setDisplaySize(23, 23);
+    if (coinImg.texture) {
+      coinImg.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    const starGfx = this.add.graphics();
+    starGfx.fillStyle(0xFFFFFF, 0.95);
+    starGfx.beginPath();
+    starGfx.moveTo(0, -7);
+    starGfx.lineTo(2, -1);
+    starGfx.lineTo(7, 0);
+    starGfx.lineTo(2, 1);
+    starGfx.lineTo(0, 7);
+    starGfx.lineTo(-2, 1);
+    starGfx.lineTo(-7, 0);
+    starGfx.lineTo(-2, -1);
+    starGfx.closePath();
+    starGfx.fillPath();
+    starGfx.setPosition(12, -12);
+
+    flyContainer.add([glow, coinImg, starGfx]);
+    flyContainer.setScale(0.2);
+
+    // Pop out and hover
+    this.tweens.add({
+      targets: flyContainer,
+      y: startY - 40,
+      scale: 1.35,
+      duration: 400,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Hover wobble
+        this.tweens.add({
+          targets: flyContainer,
+          y: startY - 46,
+          duration: 350,
+          yoyo: true,
+          ease: 'Sine.easeInOut',
+          onComplete: () => {
+            // Convert to screen coordinates to fly seamlessly to HUD score
+            const screenX = flyContainer.x - this.cameras.main.scrollX;
+            const screenY = flyContainer.y - this.cameras.main.scrollY;
+            flyContainer.setScrollFactor(0).setPosition(screenX, screenY);
+
+            // Target HUD score position
+            const targetScreenX = 140;
+            const targetScreenY = 36;
+
+            this.tweens.add({
+              targets: flyContainer,
+              x: targetScreenX,
+              y: targetScreenY,
+              scale: 0.55,
+              duration: 550,
+              ease: 'Power2.easeInOut',
+              onComplete: () => {
+                flyContainer.destroy();
+                this.#playCoinSound();
+
+                // Score punch tween
+                if (this.#hudScoreText) {
+                  this.tweens.add({
+                    targets: this.#hudScoreText,
+                    scale: 1.3,
+                    duration: 120,
+                    yoyo: true,
+                    ease: 'Power1',
+                  });
+                }
+              },
+            });
+          },
+        });
+      },
+    });
+  }
+
+  /**
+   * Synthesizes a crisp retro 2-tone coin chime using Web Audio
+   * @returns {void}
+   */
+  #playCoinSound() {
+    try {
+      const audioCtx = this.sound?.context;
+      if (!audioCtx || audioCtx.state === 'suspended') {
+        audioCtx?.resume?.();
+      }
+      if (audioCtx) {
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        // Note 1: B5 (987.77 Hz)
+        osc.frequency.setValueAtTime(987.77, now);
+        // Note 2: E6 (1318.51 Hz) after 0.08s
+        osc.frequency.setValueAtTime(1318.51, now + 0.08);
+
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+        osc.start(now);
+        osc.stop(now + 0.35);
+      }
+    } catch {
+      // Audio fallback safe
+    }
+  }
+
+  /**
+   * Synthesizes a secret / token fanfare sound using Web Audio
+   * @returns {void}
+   */
+  #playTokenSound() {
+    try {
+      const audioCtx = this.sound?.context;
+      if (!audioCtx || audioCtx.state === 'suspended') {
+        audioCtx?.resume?.();
+      }
+      if (audioCtx) {
+        const now = audioCtx.currentTime;
+        const notes = [587.33, 880, 1174.66, 1760]; // D5, A5, D6, A6
+        notes.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+          osc.start(now + idx * 0.08);
+          osc.stop(now + idx * 0.08 + 0.25);
+        });
+      }
+    } catch {
+      // Audio fallback safe
+    }
+  }
+
+  /**
+   * Initializes Guide Trail container
+   * @returns {void}
+   */
+  #createGuideTrail() {
+    this.#guideTrailContainer = this.add.container(0, 0).setDepth(3);
+    this.#updateGuideTrail();
+  }
+
+  /**
+   * Toggles guide trail state on/off with T key
+   * @returns {void}
+   */
+  #toggleGuideTrail() {
+    this.#isGuideTrailEnabled = !this.#isGuideTrailEnabled;
+    this.#updateGuideTrail();
+  }
+
+  /**
+   * Rebuilds small glowing cyan chevrons along the shortest walkable path to the nearest uncleared portal
+   * @returns {void}
+   */
+  #updateGuideTrail() {
+    if (!this.#guideTrailContainer) return;
+    this.#guideTrailContainer.removeAll(true);
+
+    if (!this.#isGuideTrailEnabled || isReduceMotionActive()) {
+      this.#guideTrailContainer.setVisible(false);
+      return;
+    }
+
+    const path = this.#findShortestPathToNearestPortal();
+    if (!path || path.length < 3) {
+      this.#guideTrailContainer.setVisible(false);
+      return;
+    }
+
+    this.#guideTrailContainer.setVisible(true);
+
+    // Place a small chevron every 2 tiles along the path, at most 8 chevrons
+    const chevrons = [];
+    for (let i = 2; i < path.length - 1 && chevrons.length < 8; i += 2) {
+      chevrons.push({ index: i, gx: path[i][0], gy: path[i][1] });
+    }
+
+    const totalChevrons = chevrons.length;
+    chevrons.forEach((item, k) => {
+      const i = item.index;
+      const currGx = item.gx;
+      const currGy = item.gy;
+      const wx = currGx * 64 + 32;
+      const wy = currGy * 64 + 32;
+
+      // Determine orientation pointing towards next tile in path
+      const nextIdx = Math.min(path.length - 1, i + 1);
+      const [nextGx, nextGy] = path[nextIdx];
+      const dx = nextGx - currGx;
+      const dy = nextGy - currGy;
+      let angle = 0;
+      if (dx > 0) angle = 0;
+      else if (dx < 0) angle = Math.PI;
+      else if (dy > 0) angle = Math.PI / 2;
+      else if (dy < 0) angle = -Math.PI / 2;
+
+      // Fade out near the portal (distance from destination)
+      const distFromEnd = (path.length - 1) - i;
+      const portalFade = Math.min(1, Math.max(0.15, distFromEnd / 4));
+      const baseAlpha = 0.40 * portalFade;
+
+      // Small chevron arrow (8-10 px) on the ground, cyan at 40% opacity
+      const chevronGfx = this.add.graphics();
+      chevronGfx.setPosition(wx, wy);
+      chevronGfx.setRotation(angle);
+
+      chevronGfx.lineStyle(2, 0x3FF0FF, 1.0);
+      chevronGfx.beginPath();
+      chevronGfx.moveTo(-4, -4.5);
+      chevronGfx.lineTo(4, 0);
+      chevronGfx.lineTo(-4, 4.5);
+      chevronGfx.strokePath();
+
+      chevronGfx.setAlpha(baseAlpha);
+      this.#guideTrailContainer.add(chevronGfx);
+
+      // Soft "wave" pulse: each chevron brightens in sequence toward the portal, looping every 1.5s
+      const waveDelay = (k / Math.max(1, totalChevrons)) * 1500;
+      this.tweens.add({
+        targets: chevronGfx,
+        alpha: { from: baseAlpha, to: Math.min(1.0, baseAlpha * 2.2) },
+        duration: 350,
+        yoyo: true,
+        delay: waveDelay,
+        repeat: -1,
+        repeatDelay: Math.max(0, 1500 - 350 * 2),
+        ease: 'Sine.easeInOut',
+      });
+    });
+  }
+
+  /**
+   * Calculates shortest walkable path from player to nearest uncleared portal
+   * @returns {Array<[number, number]> | null}
+   */
+  #findShortestPathToNearestPortal() {
+    if (!this.#player || !this.#portals || this.#portals.length === 0) return null;
+
+    const unclearedPortals = this.#portals.filter((p) => !runState.cleared.includes(p.id));
+    if (unclearedPortals.length === 0) return null;
+
+    const startGx = Math.floor((this.#player.sprite.x + 32) / 64);
+    const startGy = Math.floor((this.#player.sprite.y + 32) / 64);
+
+    let shortestPath = null;
+
+    for (const portal of unclearedPortals) {
+      const targetGx = Math.floor(portal.cx / 64);
+      const targetGy = Math.floor(portal.cy / 64);
+
+      const path = this.#bfsPath(startGx, startGy, targetGx, targetGy);
+      if (path && (!shortestPath || path.length < shortestPath.length)) {
+        shortestPath = path;
+      }
+    }
+
+    return shortestPath;
+  }
+
+  /**
+   * Breadth-First Search on 64px grid using collision layer
+   * @param {number} sx
+   * @param {number} sy
+   * @param {number} tx
+   * @param {number} ty
+   * @returns {Array<[number, number]> | null}
+   */
+  #bfsPath(sx, sy, tx, ty) {
+    if (sx === tx && sy === ty) return [[sx, sy]];
+
+    const queue = [[sx, sy]];
+    const visited = new Set([`${sx},${sy}`]);
+    const parent = {};
+
+    const maxTilesX = 30;
+    const maxTilesY = 18;
+
+    while (queue.length > 0) {
+      const [cx, cy] = queue.shift();
+
+      if (cx === tx && cy === ty) {
+        const path = [];
+        let curr = `${tx},${ty}`;
+        while (curr) {
+          const [px, py] = curr.split(',').map(Number);
+          path.unshift([px, py]);
+          curr = parent[curr];
+        }
+        return path;
+      }
+
+      const dirs = [
+        [0, -1], // UP
+        [0, 1],  // DOWN
+        [-1, 0], // LEFT
+        [1, 0],  // RIGHT
+      ];
+
+      for (const [dx, dy] of dirs) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+
+        if (nx < 0 || nx >= maxTilesX || ny < 0 || ny >= maxTilesY) continue;
+
+        const key = `${nx},${ny}`;
+        if (visited.has(key)) continue;
+
+        // Check collision at (nx * 64, ny * 64)
+        if (this.#collisionLayerRef) {
+          const tile = this.#collisionLayerRef.getTileAtWorldXY(nx * 64, ny * 64, true);
+          if (tile && tile.index !== -1) {
+            continue; // blocked
+          }
+        }
+
+        visited.add(key);
+        parent[key] = `${cx},${cy}`;
+        queue.push([nx, ny]);
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Spawns clean walking trail behind the cat (afterimages + 2x2 pixel emitter particles)
+   * @param {number} time
+   * @returns {void}
+   */
+  #spawnCatWalkTrail(time) {
+    if (!this.#player || !this.#player.catVisual || isReduceMotionActive()) return;
+    const catVisual = this.#player.catVisual;
+
+    const isShift = this._controls.isShiftKeyDown();
+
+    // 1. Afterimages: every ~60 ms while moving (40 ms if SHIFT)
+    const afterimageInterval = isShift ? 40 : 60;
+    if (time - this.#lastCatAfterimageTime >= afterimageInterval) {
+      this.#lastCatAfterimageTime = time;
+
+      // Max 4 at once
+      while (this.#activeAfterimages.length >= 4) {
+        const oldest = this.#activeAfterimages.shift();
+        if (oldest && oldest.scene) {
+          oldest.destroy();
+        }
+      }
+
+      // Spawn copy of cat sprite at cat's position, tinted cyan (#3FF0FF), alpha 0.35 (0.45 if SHIFT), additive blend
+      const ghost = this.add.image(catVisual.x, catVisual.y, catVisual.texture.key)
+        .setOrigin(catVisual.originX, catVisual.originY)
+        .setScale(catVisual.scaleX, catVisual.scaleY)
+        .setFlipX(catVisual.flipX)
+        .setDepth(5) // strictly BELOW the cat (depth 7) and above the ground (depth 0/1)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setTint(0x3FF0FF)
+        .setAlpha(isShift ? 0.45 : 0.35);
+
+      this.#activeAfterimages.push(ghost);
+
+      // Fade it to 0 and shrink it to 0.9x over 250 ms
+      this.tweens.add({
+        targets: ghost,
+        alpha: 0,
+        scaleX: catVisual.scaleX * 0.9,
+        scaleY: catVisual.scaleY * 0.9,
+        duration: 250,
+        ease: 'Linear',
+        onComplete: () => {
+          const idx = this.#activeAfterimages.indexOf(ghost);
+          if (idx !== -1) {
+            this.#activeAfterimages.splice(idx, 1);
+          }
+          ghost.destroy();
+        },
+      });
+    }
+
+    // 2. Particles: every ~40 ms, 1 tiny square (2x2 px), alternating cyan and magenta (#FF3FD0),
+    // spawned at cat's feet with random offset, drifting slightly opposite movement, fading over 400 ms.
+    if (time - this.#lastCatParticleTime >= 40) {
+      this.#lastCatParticleTime = time;
+      this.#catParticleColorToggle = !this.#catParticleColorToggle;
+      const pColor = this.#catParticleColorToggle ? 0x3FF0FF : 0xFF3FD0;
+
+      const ox = Phaser.Math.Between(-3, 3);
+      const oy = Phaser.Math.Between(-2, 2);
+
+      let vx = 0;
+      let vy = 0;
+      switch (this.#player.direction) {
+        case DIRECTION.LEFT:
+          vx = Phaser.Math.Between(15, 25);
+          break;
+        case DIRECTION.RIGHT:
+          vx = Phaser.Math.Between(-25, -15);
+          break;
+        case DIRECTION.UP:
+          vy = Phaser.Math.Between(15, 25);
+          break;
+        case DIRECTION.DOWN:
+          vy = Phaser.Math.Between(-25, -15);
+          break;
+        default:
+          vy = 15;
+      }
+
+      if (this.#catTrailEmitter) {
+        this.#catTrailEmitter.setParticleTint(pColor);
+        this.#catTrailEmitter.setParticleSpeed(vx, vy);
+        this.#catTrailEmitter.emitParticleAt(catVisual.x + ox, catVisual.y + oy, 1);
+      }
+    }
+  }
+
+  /**
+   * Checks for 4-tile line-of-sight or direct interaction with Hacker Apes
+   * @returns {void}
+   */
+  #checkApeLineOfSightAndInteraction() {
+    if (this.#isEngagingPortal || !this.#player) return;
+
+    const playerX = this.#player.sprite.x;
+    const playerY = this.#player.sprite.y;
+    const wasSpacePressed = this._controls.wasSpaceKeyPressed() || this._controls.wasEnterKeyPressed();
+
+    for (const ape of this.#hackerApes) {
+      if (runState.cleared.includes(ape.portalId)) {
+        continue;
+      }
+
+      const distPixels = Phaser.Math.Distance.Between(playerX, playerY, ape.sprite.x, ape.sprite.y);
+      const portalDistPixels = Phaser.Math.Distance.Between(playerX, playerY, ape.portalX, ape.portalY);
+
+      // Line of sight: within 4 tiles (4 * 64 = 256px) on same row or column
+      const diffX = Math.abs(playerX - ape.baseX);
+      const diffY = Math.abs(playerY - ape.baseY);
+      const inLineOfSight = (diffX <= 4 * 64 && diffY <= 40) || (diffY <= 4 * 64 && diffX <= 40);
+
+      // Direct interaction: adjacent and pressed Space / Enter
+      const isInteracting = wasSpacePressed && (distPixels <= 80 || portalDistPixels <= 80);
+
+      if (inLineOfSight || isInteracting) {
+        this.#triggerApeBattle(ape);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Triggers the battle transition and dialog sequence for a Hacker Ape
+   * @param {object} ape
+   * @returns {void}
+   */
+  #triggerApeBattle(ape) {
+    this.#isEngagingPortal = true;
+    this._controls.lockInput = true;
+
+    // 1. "!" pops over the ape
+    const emote = this.add.container(ape.sprite.x, ape.sprite.y - 48).setDepth(999);
+    const bubble = this.add.circle(0, 0, 14, 0x070415, 0.95).setStrokeStyle(2, 0xFFD700);
+    const excl = this.add.text(0, 0, '!', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '20px',
+      color: '#FFD700',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    emote.add([bubble, excl]);
+
+    this.tweens.add({
+      targets: emote,
+      y: '-=16',
+      scale: { from: 0.6, to: 1.15 },
+      duration: 300,
+      ease: 'Back.easeOut',
+    });
+
+    // 2. Play taunt line in dialog box
+    this.time.delayedCall(400, () => {
+      this.#dialogUi.showDialogModal([ape.taunt], () => {
+        emote.destroy();
+
+        // 3. Existing battle transition plays (camera fade)
+        this.cameras.main.fadeOut(800, 0, 0, 0);
+        this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+          // 4. Battle-intro screen in existing battle style
+          this.scene.start(SCENE_KEYS.APE_BATTLE_SCENE, {
+            mode: 'intro',
+            portalId: ape.portalId,
+            game: ape.game,
+            districtName: ape.districtName,
+            apeAsset: ape.assetKey,
+            apeName: 'HACKER APE',
+          });
+        });
+      });
+    });
+  }
+
+  /**
+   * Builds the modal pause menu
+   * @returns {void}
+   */
+  #createPauseMenu() {
+    const width = 1024;
+    const height = 576;
+
+    this.#pauseMenuContainer = this.add.container(0, 0);
+    this.#pauseMenuContainer.setScrollFactor(0).setDepth(10000).setVisible(false);
+
+    // Full screen dim backdrop
+    const backdrop = this.add.rectangle(0, 0, width, height, 0x05030e, 0.82)
+      .setOrigin(0)
+      .setInteractive();
+
+    // Pause Dialog Box
+    const boxWidth = 460;
+    const boxHeight = 270;
+    const boxX = width / 2;
+    const boxY = height / 2;
+
+    const modalBox = this.add.rectangle(boxX, boxY, boxWidth, boxHeight, 0x0e0a24, 0.98)
+      .setStrokeStyle(2, 0x3FF0FF, 1);
+
+    const cornerDecor = this.add.graphics();
+    cornerDecor.lineStyle(2, 0xFF3366, 0.8);
+    cornerDecor.strokeRect(boxX - boxWidth / 2 - 4, boxY - boxHeight / 2 - 4, boxWidth + 8, boxHeight + 8);
+
+    const header = this.add.text(boxX, boxY - 85, '// SYSTEM PAUSED //', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '22px',
+      color: '#3FF0FF',
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+
+    const subheader = this.add.text(boxX, boxY - 58, 'CYBER-GRID EXECUTION SUSPENDED', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '12px',
+      color: '#8E8AAB',
+    }).setOrigin(0.5);
+
+    // Option 0: Resume
+    const resumeText = this.add.text(boxX, boxY - 5, '▶ RESUME MISSION', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '18px',
+      color: '#3FF0FF',
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    resumeText.on('pointerdown', () => {
+      this.#selectedPauseOption = 0;
+      this.#executePauseOption();
+    });
+
+    // Option 1: Quit
+    const quitText = this.add.text(boxX, boxY + 42, '▶ QUIT TO TITLE', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '18px',
+      color: '#777292',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    quitText.on('pointerdown', () => {
+      this.#selectedPauseOption = 1;
+      this.#executePauseOption();
+    });
+
+    const footer = this.add.text(boxX, boxY + 95, '[W/S or ↑/↓] SELECT  •  [SPACE/ENTER] CONFIRM  •  [ESC] RESUME', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '11px',
+      color: '#655F82',
+    }).setOrigin(0.5);
+
+    this.#pauseOptionTexts = [resumeText, quitText];
+
+    this.#pauseMenuContainer.add([
+      backdrop,
+      modalBox,
+      cornerDecor,
+      header,
+      subheader,
+      resumeText,
+      quitText,
+      footer,
+    ]);
+  }
+
+  /**
+   * Toggles pause menu state
+   * @returns {void}
+   */
+  #togglePauseMenu() {
+    this.#isGamePaused = !this.#isGamePaused;
+    if (this.#isGamePaused) {
+      this.#selectedPauseOption = 0;
+      this.#updatePauseMenuUI();
+      this.#pauseMenuContainer.setVisible(true);
+      runState.pauseTimer();
+    } else {
+      this.#pauseMenuContainer.setVisible(false);
+      runState.resumeTimer();
+    }
+  }
+
+  /**
+   * Refreshes highlight and styles on pause options
+   * @returns {void}
+   */
+  #updatePauseMenuUI() {
+    this.#pauseOptionTexts.forEach((optText, index) => {
+      const isSelected = index === this.#selectedPauseOption;
+      if (isSelected) {
+        optText.setColor(index === 0 ? '#3FF0FF' : '#FF3366').setScale(1.08).setFontStyle('bold');
+      } else {
+        optText.setColor('#777292').setScale(1).setFontStyle('normal');
+      }
+    });
+  }
+
+  /**
+   * Executes the chosen pause action
+   * @returns {void}
+   */
+  #executePauseOption() {
+    if (this.#selectedPauseOption === 0) {
+      this.#togglePauseMenu();
+    } else {
+      this.#isGamePaused = false;
+      this.#pauseMenuContainer.setVisible(false);
+      runState.save();
+      this.scene.start(SCENE_KEYS.TITLE_SCENE);
+    }
+  }
+
+  /**
+   * Builds the fixed top-right minimap overlay (~160px wide, cyan neon border, dark frame, portal icons, blinking player dot)
+   * @returns {void}
+   */
+  #createMinimap() {
+    const mapWidth = 160;
+    const mapHeight = 96;
+    const frameX = 844;
+    const frameY = 14;
+
+    this.#minimapContainer = this.add.container(frameX, frameY);
+    this.#minimapContainer.setScrollFactor(0).setDepth(9999);
+
+    // Dark frame with cyan neon border
+    const darkFrame = this.add.rectangle(-2, -2, mapWidth + 4, mapHeight + 4, 0x050414, 0.95)
+      .setOrigin(0, 0)
+      .setStrokeStyle(2, 0x3FF0FF, 0.95);
+
+    // Header label
+    const headerBg = this.add.rectangle(-2, -16, 78, 14, 0x070414, 0.95)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1.5, 0x3FF0FF, 0.8);
+    const headerLabel = this.add.text(2, -15, 'MAP // 2099', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '9px',
+      color: '#3FF0FF',
+      fontStyle: 'bold',
+    });
+
+    // Scaled copy of neo-city.png
+    const mapTextureKey = this.textures.exists('neo-city') ? 'neo-city' : WORLD_ASSET_KEYS.MAIN_1_BACKGROUND;
+    const mapImage = this.add.image(0, 0, mapTextureKey)
+      .setOrigin(0, 0)
+      .setDisplaySize(mapWidth, mapHeight);
+    mapImage.setAlpha(0.88);
+    if (mapImage.texture) {
+      mapImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    // Portal icons container
+    const portalsGroup = this.add.container(0, 0);
+    this.#minimapPortalMarkers = [];
+
+    this.#portals.forEach((p) => {
+      const mx = (p.cx / 1920) * mapWidth;
+      const my = (p.cy / 1152) * mapHeight;
+      const isCleared = runState.cleared.includes(p.id);
+
+      const glow = this.add.circle(mx, my, 4.5, isCleared ? 0x00FF66 : 0x00E5FF, 0.35);
+      const marker = this.add.circle(mx, my, 3, isCleared ? 0x00FF66 : 0x00E5FF, 1.0);
+      marker.setStrokeStyle(1, 0x020108, 0.9);
+
+      portalsGroup.add([glow, marker]);
+      this.#minimapPortalMarkers.push({ id: p.id, marker, glow });
+    });
+
+    // Blinking player dot
+    this.#minimapPlayerDot = this.add.circle(0, 0, 3.5, 0xFFE600, 1.0);
+    this.#minimapPlayerDot.setStrokeStyle(1.5, 0xFFFFFF, 1.0);
+
+    this.tweens.add({
+      targets: this.#minimapPlayerDot,
+      alpha: { from: 1.0, to: 0.15 },
+      duration: 350,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Bottom toggle hint
+    const hintText = this.add.text(mapWidth, mapHeight + 3, '[M] EXPAND', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '9px',
+      color: '#8E8AAB',
+      fontStyle: 'bold',
+    }).setOrigin(1, 0);
+
+    this.#minimapContainer.add([
+      darkFrame,
+      headerBg,
+      headerLabel,
+      mapImage,
+      portalsGroup,
+      this.#minimapPlayerDot,
+      hintText,
+    ]);
+  }
+
+  /**
+   * Syncs player position and portal cleared status on minimap
+   * @returns {void}
+   */
+  #updateMinimap() {
+    if (!this.#minimapContainer) return;
+
+    // Update portal colors
+    this.#minimapPortalMarkers.forEach((item) => {
+      const isCleared = runState.cleared.includes(item.id);
+      const col = isCleared ? 0x00FF66 : 0x00E5FF;
+      item.marker.setFillStyle(col);
+      item.glow.setFillStyle(col);
+    });
+
+    // Update player dot
+    if (this.#player && this.#player.sprite && this.#minimapPlayerDot) {
+      const pwX = this.#player.sprite.x + 32;
+      const pwY = this.#player.sprite.y + 32;
+      const mx = Phaser.Math.Clamp((pwX / 1920) * 160, 2, 158);
+      const my = Phaser.Math.Clamp((pwY / 1152) * 96, 2, 94);
+      this.#minimapPlayerDot.setPosition(mx, my);
+    }
+  }
+
+  /**
+   * Builds the big centered map view overlay (toggled via M key, pauses game)
+   * @returns {void}
+   */
+  #createBigMap() {
+    this.#bigMapContainer = this.add.container(0, 0);
+    this.#bigMapContainer.setScrollFactor(0).setDepth(10050);
+    this.#bigMapContainer.setVisible(false);
+
+    // Fullscreen dark backdrop
+    const backdrop = this.add.rectangle(0, 0, 1024, 576, 0x020108, 0.85)
+      .setOrigin(0, 0)
+      .setInteractive(); // block pointer events
+
+    // Center dialog frame
+    const frameW = 672;
+    const frameH = 450;
+    const cx = 512;
+    const cy = 288;
+
+    const darkPanel = this.add.rectangle(cx, cy, frameW, frameH, 0x070414, 0.97)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(2.5, 0x3FF0FF, 1.0);
+
+    const outerGlow = this.add.rectangle(cx, cy, frameW + 6, frameH + 6)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(1.5, 0x00E5FF, 0.35);
+
+    // Header banner
+    const titleText = this.add.text(cx, cy - 200, 'NEO-CITY 2099 // DISTRICT SURVEILLANCE', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '17px',
+      color: '#3FF0FF',
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0.5);
+
+    const statusText = this.add.text(cx, cy - 180, 'SECURE ALL 3 PORTAL DISTRICTS TO OVERRIDE THE BLOCKCHAIN', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '11px',
+      color: '#8E8AAB',
+    }).setOrigin(0.5, 0.5);
+
+    // Scaled map image: 640x384 centered
+    const mapW = 640;
+    const mapH = 384;
+    const mapTextureKey = this.textures.exists('neo-city') ? 'neo-city' : WORLD_ASSET_KEYS.MAIN_1_BACKGROUND;
+    const bigMapImage = this.add.image(cx, cy + 6, mapTextureKey)
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize(mapW, mapH);
+    bigMapImage.setAlpha(0.92);
+    if (bigMapImage.texture) {
+      bigMapImage.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    const mapBorder = this.add.rectangle(cx, cy + 6, mapW + 2, mapH + 2)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(1.5, 0x3FF0FF, 0.6);
+
+    // Dynamic contents container (portals & player dot)
+    this.#bigMapDynamicLayer = this.add.container(cx - mapW / 2, cy + 6 - mapH / 2);
+
+    // Footer instruction
+    const closeHint = this.add.text(cx, cy + 210, '[M] or [ESC] CLOSE MAP', {
+      fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+      fontSize: '13px',
+      color: '#00E5FF',
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0.5);
+
+    this.#bigMapContainer.add([
+      backdrop,
+      darkPanel,
+      outerGlow,
+      titleText,
+      statusText,
+      bigMapImage,
+      mapBorder,
+      this.#bigMapDynamicLayer,
+      closeHint,
+    ]);
+  }
+
+  /**
+   * Toggles the big map view on/off (game is paused while open)
+   * @returns {void}
+   */
+  #toggleBigMap() {
+    this.#isBigMapOpen = !this.#isBigMapOpen;
+    if (this.#isBigMapOpen) {
+      this.#rebuildBigMapContent();
+      this.#bigMapContainer?.setVisible(true);
+      runState.pauseTimer();
+    } else {
+      this.#bigMapContainer?.setVisible(false);
+      runState.resumeTimer();
+    }
+  }
+
+  /**
+   * Rebuilds dynamic markers on the big map view
+   * @returns {void}
+   */
+  #rebuildBigMapContent() {
+    if (!this.#bigMapDynamicLayer) return;
+    this.#bigMapDynamicLayer.removeAll(true);
+
+    const mapW = 640;
+    const mapH = 384;
+
+    // 1. Portal icons on big map
+    this.#portals.forEach((p) => {
+      const bx = (p.cx / 1920) * mapW;
+      const by = (p.cy / 1152) * mapH;
+      const isCleared = runState.cleared.includes(p.id);
+      const col = isCleared ? 0x00FF66 : 0x00E5FF;
+      const colHex = isCleared ? '#00FF66' : '#3FF0FF';
+
+      // Outer pulsing ring
+      const glow = this.add.circle(bx, by, 11, col, 0.28);
+      this.tweens.add({
+        targets: glow,
+        scale: { from: 0.85, to: 1.25 },
+        alpha: { from: 0.15, to: 0.45 },
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      // Center core
+      const core = this.add.circle(bx, by, 6.5, col, 1.0);
+      core.setStrokeStyle(1.5, 0x04030a, 1.0);
+
+      // District label with clear status badge
+      const labelText = `[${p.id}] ${p.label}`;
+      const statusText = isCleared ? '✓ SECURED' : '⚠ HOSTILE APE';
+
+      const tag = this.add.text(bx, by - 20, labelText, {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '11px',
+        color: colHex,
+        fontStyle: 'bold',
+        stroke: '#050210',
+        strokeThickness: 3,
+      }).setOrigin(0.5, 0.5);
+
+      const statusTag = this.add.text(bx, by + 18, statusText, {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '9px',
+        color: isCleared ? '#00FF66' : '#FF9900',
+        fontStyle: 'bold',
+        stroke: '#050210',
+        strokeThickness: 3,
+      }).setOrigin(0.5, 0.5);
+
+      this.#bigMapDynamicLayer.add([glow, core, tag, statusTag]);
+    });
+
+    // 2. Blinking player dot on big map
+    if (this.#player && this.#player.sprite) {
+      const pwX = this.#player.sprite.x + 32;
+      const pwY = this.#player.sprite.y + 32;
+      const bpx = Phaser.Math.Clamp((pwX / 1920) * mapW, 6, mapW - 6);
+      const bpy = Phaser.Math.Clamp((pwY / 1152) * mapH, 6, mapH - 6);
+
+      // Expanding radar wave
+      const radar = this.add.circle(bpx, bpy, 6, 0xFFE600, 0.5);
+      this.tweens.add({
+        targets: radar,
+        scale: 3,
+        alpha: 0,
+        duration: 1000,
+        repeat: -1,
+      });
+
+      // Player dot
+      const pDot = this.add.circle(bpx, bpy, 5.5, 0xFFE600, 1.0);
+      pDot.setStrokeStyle(1.5, 0xFFFFFF, 1.0);
+
+      this.tweens.add({
+        targets: pDot,
+        alpha: { from: 1.0, to: 0.2 },
+        duration: 350,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+
+      const youTag = this.add.text(bpx, bpy - 15, 'YOU', {
+        fontFamily: KENNEY_FUTURE_NARROW_FONT_NAME,
+        fontSize: '11px',
+        color: '#FFE600',
+        fontStyle: 'bold',
+        stroke: '#050210',
+        strokeThickness: 3,
+      }).setOrigin(0.5, 0.5);
+
+      this.#bigMapDynamicLayer.add([radar, pDot, youTag]);
+    }
+  }
+
+  /**
+   * Applies neon cyberpunk atmosphere:
+   * - Night colour grade (postFX colorMatrix / tint toward dark navy + violet)
+   * - Glow postFX on the player
+   * - Floating neon particles
+   * - Subtle scanline overlay
+   * @param {Phaser.Tilemaps.Tilemap} map
+   * @returns {void}
+   */
+  #createCyberpunkPolish(map) {
+    // 1. Night colour grade (Phaser postFX colorMatrix / tint toward dark navy + violet)
+    if (this.cameras.main.postFX) {
+      const colorMatrix = this.cameras.main.postFX.addColorMatrix();
+      colorMatrix.saturate(1.25);
+      colorMatrix.contrast(1.08);
+    }
+
+    // Ambient dark navy + violet overlay for atmospheric depth
+    const mapW = map.widthInPixels || 1920;
+    const mapH = map.heightInPixels || 1152;
+    this.add.rectangle(0, 0, mapW, mapH, 0x160B32, 0.18)
+      .setOrigin(0)
+      .setDepth(2)
+      .setBlendMode(Phaser.BlendModes.MULTIPLY);
+
+    // 2. Glow postFX on the player
+    if (this.#player?.sprite?.postFX) {
+      this.#player.sprite.postFX.addGlow(0x3FF0FF, 2, 0, false, 0.1, 8);
+    }
+
+    // 3. Floating neon particles (25 lightweight motes drifting across camera)
+    if (!isReduceMotionActive()) {
+      if (!this.textures.exists('neon-mote')) {
+        const pGfx = this.make.graphics({ x: 0, y: 0, add: false });
+        pGfx.fillStyle(0xFFFFFF, 1);
+        pGfx.fillCircle(2, 2, 2);
+        pGfx.generateTexture('neon-mote', 4, 4);
+        pGfx.destroy();
+      }
+
+      this.add.particles(0, 0, 'neon-mote', {
+        x: { min: 0, max: 1024 },
+        y: { min: 0, max: 576 },
+        speedX: { min: -10, max: 10 },
+        speedY: { min: -18, max: -40 },
+        scale: { start: 0.6, end: 1.2 },
+        alpha: { start: 0, end: 0.45, ease: 'Sine.easeInOut' },
+        lifespan: { min: 2500, max: 4000 },
+        tint: [0x3FF0FF, 0xFF3FD0, 0x00FF66, 0xF5B82E],
+        blendMode: Phaser.BlendModes.ADD,
+        frequency: 200,
+        maxAliveParticles: 25,
+      }).setScrollFactor(0).setDepth(850);
+    }
+
+    // 4. Subtle scanline overlay (depth 890, below HUD/Dialog so text stays 100% crisp)
+    if (!this.textures.exists('cyber-scanline')) {
+      const scanGfx = this.make.graphics({ x: 0, y: 0, add: false });
+      scanGfx.fillStyle(0x000000, 0.22);
+      scanGfx.fillRect(0, 0, 1024, 2);
+      scanGfx.fillStyle(0x000000, 0.0);
+      scanGfx.fillRect(0, 2, 1024, 2);
+      scanGfx.generateTexture('cyber-scanline', 1024, 4);
+      scanGfx.destroy();
+    }
+
+    this.add.tileSprite(0, 0, 1024, 576, 'cyber-scanline')
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(890)
+      .setAlpha(0.28);
+  }
+
+  /**
    * @returns {void}
    */
   #handlePlayerInteraction() {
@@ -590,6 +2386,18 @@ export class WorldScene extends BaseScene {
       this.#items.splice(nearbyItemIndex, 1);
       dataManager.addItemPickedUp(nearbyItem.id);
       this.#dialogUi.showDialogModal([`You found a ${item.name}`]);
+      return;
+    }
+
+    // check for a nearby hidden token
+    const nearbyToken = this.#tokens.find(
+      (token) => !this.#collectedTokenIds.has(token.id) &&
+        ((token.tileX === targetPosition.x && token.tileY === targetPosition.y) ||
+         (token.tileX === this.#player.sprite.x && token.tileY === this.#player.sprite.y))
+    );
+    if (nearbyToken) {
+      this.#collectToken(nearbyToken);
+      return;
     }
   }
 
@@ -597,6 +2405,8 @@ export class WorldScene extends BaseScene {
    * @returns {void}
    */
   #handlePlayerMovementUpdate() {
+    this.#updateGuideTrail();
+
     // update player position on global data store
     dataManager.store.set(DATA_MANAGER_STORE_KEYS.PLAYER_POSITION, {
       x: this.#player.sprite.x,
@@ -753,6 +2563,9 @@ export class WorldScene extends BaseScene {
         (property) => property.name === TILED_NPC_PROPERTY.ID
       )?.value;
       const npcDetails = DataUtils.getNpcData(this, npcId);
+      if (!npcDetails) {
+        return;
+      }
 
       // In Tiled, the x value is how far the object starts from the left, and the y is the bottom of tiled object that is being added
       const npc = new NPC({

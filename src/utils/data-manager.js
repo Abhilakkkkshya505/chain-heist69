@@ -50,6 +50,8 @@ const LOCAL_STORAGE_KEY = 'MONSTER_TAMER_DATA';
 /** @type {GlobalState} */
 const initialState = {
   player: {
+    name: 'HUNTER_01',
+    cat: 'cat-1',
     position: {
       x: 0,
       y: 0,
@@ -93,6 +95,8 @@ const initialState = {
 };
 
 export const DATA_MANAGER_STORE_KEYS = Object.freeze({
+  PLAYER_NAME: 'PLAYER_NAME',
+  PLAYER_CAT: 'PLAYER_CAT',
   PLAYER_POSITION: 'PLAYER_POSITION',
   PLAYER_DIRECTION: 'PLAYER_DIRECTION',
   PLAYER_LOCATION: 'PLAYER_LOCATION',
@@ -177,6 +181,8 @@ class DataManager extends Phaser.Events.EventEmitter {
   startNewGame() {
     // get existing data before resetting all of the data, so we can persist options data
     const existingData = { ...this.#dataManagerDataToGlobalStateObject() };
+    existingData.player.name = this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_NAME) || initialState.player.name;
+    existingData.player.cat = this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_CAT) || initialState.player.cat;
     existingData.player.position = { ...initialState.player.position };
     existingData.player.location = { ...initialState.player.location };
     existingData.player.direction = initialState.player.direction;
@@ -350,6 +356,38 @@ class DataManager extends Phaser.Events.EventEmitter {
   }
 
   /**
+   * @returns {string}
+   */
+  getPlayerName() {
+    return this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_NAME) || initialState.player.name;
+  }
+
+  /**
+   * @param {string} name
+   * @returns {void}
+   */
+  setPlayerName(name) {
+    this.#store.set(DATA_MANAGER_STORE_KEYS.PLAYER_NAME, name);
+    this.saveData();
+  }
+
+  /**
+   * @returns {string}
+   */
+  getPlayerCat() {
+    return this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_CAT) || initialState.player.cat;
+  }
+
+  /**
+   * @param {string} catKey
+   * @returns {void}
+   */
+  setPlayerCat(catKey) {
+    this.#store.set(DATA_MANAGER_STORE_KEYS.PLAYER_CAT, catKey);
+    this.saveData();
+  }
+
+  /**
    * @returns {Set<number>}
    */
   getDefeatedNpcs() {
@@ -362,6 +400,8 @@ class DataManager extends Phaser.Events.EventEmitter {
    */
   #updateDataManger(data) {
     this.#store.set({
+      [DATA_MANAGER_STORE_KEYS.PLAYER_NAME]: data.player.name || initialState.player.name,
+      [DATA_MANAGER_STORE_KEYS.PLAYER_CAT]: data.player.cat || initialState.player.cat,
       [DATA_MANAGER_STORE_KEYS.PLAYER_POSITION]: data.player.position,
       [DATA_MANAGER_STORE_KEYS.PLAYER_DIRECTION]: data.player.direction,
       [DATA_MANAGER_STORE_KEYS.PLAYER_LOCATION]: data.player.location || { ...initialState.player.location },
@@ -387,6 +427,8 @@ class DataManager extends Phaser.Events.EventEmitter {
   #dataManagerDataToGlobalStateObject() {
     return {
       player: {
+        name: this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_NAME) || initialState.player.name,
+        cat: this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_CAT) || initialState.player.cat,
         position: {
           x: this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_POSITION).x,
           y: this.#store.get(DATA_MANAGER_STORE_KEYS.PLAYER_POSITION).y,

@@ -67,9 +67,10 @@ export class Menu {
 
     // add player input cursor
     this.#userInputCursor = this.#scene.add.image(20 + this.#padding, 28 + this.#padding, UI_ASSET_KEYS.CURSOR_WHITE);
-    this.#userInputCursor.setScale(2.5);
+    this.#userInputCursor.setScale(2.5).setTint(0xFF3FD0);
     this.#container.add(this.#userInputCursor);
 
+    this.#updateTextHighlight();
     this.hide();
   }
 
@@ -132,13 +133,39 @@ export class Menu {
     const g = this.#scene.add.graphics();
     const menuColor = this.#getMenuColorsFromDataManager();
 
-    g.fillStyle(menuColor.main, 1);
-    g.fillRect(1, 0, this.#width - 1, this.#height - 1);
-    g.lineStyle(8, menuColor.border, 1);
+    g.fillStyle(0x120A22, 0.95);
+    g.fillRect(0, 0, this.#width, this.#height);
+    g.lineStyle(3, 0x3FF0FF, 1);
     g.strokeRect(0, 0, this.#width, this.#height);
-    g.setAlpha(0.9);
+
+    // Magenta highlight corner accents (#FF3FD0)
+    g.lineStyle(2, 0xFF3FD0, 0.95);
+    g.lineBetween(0, 0, 16, 0);
+    g.lineBetween(0, 0, 0, 16);
+    g.lineBetween(this.#width, this.#height, this.#width - 16, this.#height);
+    g.lineBetween(this.#width, this.#height, this.#width, this.#height - 16);
 
     return g;
+  }
+
+  /**
+   * Updates text highlighting: selected option in magenta (#FF3FD0), numbers in gold (#F5B82E)
+   * @returns {void}
+   */
+  #updateTextHighlight() {
+    this.#menuOptionsTextGameObjects.forEach((textObj, idx) => {
+      const rawText = this.#availableMenuOptions[idx] || '';
+      const isSelected = idx === this.#selectedMenuOptionIndex;
+      const hasNumbers = /\d+/.test(rawText);
+
+      if (isSelected) {
+        textObj.setColor('#FF3FD0');
+      } else if (hasNumbers) {
+        textObj.setColor('#F5B82E');
+      } else {
+        textObj.setColor('#FFFFFF');
+      }
+    });
   }
 
   /**
@@ -171,6 +198,7 @@ export class Menu {
     const y = 28 + this.#padding + this.#selectedMenuOptionIndex * 50;
 
     this.#userInputCursor.setPosition(x, y);
+    this.#updateTextHighlight();
   }
 
   /**

@@ -46,16 +46,19 @@ export class NineSlice {
   #createNineSliceTextures(textureManager, assetKey) {
     const methodName = 'createNineSliceTextures';
 
-    const texture = textureManager.get(assetKey);
-    if (texture.key === '__MISSING') {
-      console.warn(`[${NineSlice.name}:${methodName}] the provided texture asset key was not found`);
-      return;
-    }
-
-    // get the original frame so we can use the image dimensions
-    if (!texture.frames['__BASE']) {
-      console.warn(`[${NineSlice.name}:${methodName}] the provided texture asset key does not have a base texture`);
-      return;
+    let texture = textureManager.get(assetKey);
+    if (texture.key === '__MISSING' || !texture.frames['__BASE']) {
+      const canvas = textureManager.createCanvas(assetKey, 96, 96);
+      if (canvas) {
+        const ctx = canvas.getContext();
+        ctx.fillStyle = '#140f2b';
+        ctx.fillRect(0, 0, 96, 96);
+        ctx.strokeStyle = '#3FF0FF';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(2, 2, 92, 92);
+        canvas.refresh();
+      }
+      texture = textureManager.get(assetKey);
     }
 
     // check to see if the texture already has more frames than the original base frame

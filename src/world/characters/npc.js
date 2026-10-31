@@ -52,6 +52,10 @@ export class NPC extends Character {
   #animationKeyPrefix;
   /** @type {number} */
   #id;
+  /** @type {Phaser.GameObjects.Sprite} */
+  #npcVisual;
+  /** @type {Phaser.GameObjects.Ellipse} */
+  #shadow;
 
   /**
    * @param {NPCConfig} config
@@ -75,7 +79,49 @@ export class NPC extends Character {
     this.#currentPathIndex = 0;
     this.#movementPattern = config.movementPattern;
     this.#lastMovementTime = Phaser.Math.Between(3500, 5000);
-    this._phaserGameObject.setScale(4);
+    this._phaserGameObject.setAlpha(0);
+
+    // Visual NPC: 48px tall (scale 3 on 16px frame), crisp pixelArt, feet at bottom-centre
+    this.#npcVisual = this._scene.add
+      .sprite(config.position.x + 32, config.position.y + 62, CHARACTER_ASSET_KEYS.NPC, this._getIdleFrame())
+      .setOrigin(0.5, 1.0)
+      .setScale(3)
+      .setDepth(this._phaserGameObject.depth + 1);
+
+    if (this.#npcVisual.texture) {
+      this.#npcVisual.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    // Soft oval shadow under character: ~28x8 px, black at 35% opacity
+    this.#shadow = this._scene.add
+      .ellipse(config.position.x + 32, config.position.y + 62, 28, 8, 0x000000, 0.35)
+      .setDepth(this._phaserGameObject.depth - 1);
+
+    const updateVisual = () => {
+      if (!this.#npcVisual || !this.#npcVisual.scene || !this._phaserGameObject || !this._phaserGameObject.scene) {
+        return;
+      }
+      this.#npcVisual.setPosition(this._phaserGameObject.x + 32, this._phaserGameObject.y + 62);
+      this.#npcVisual.setFrame(this._phaserGameObject.frame.name);
+      this.#npcVisual.setFlipX(this._phaserGameObject.flipX);
+      this.#npcVisual.setDepth(this._phaserGameObject.depth + 1);
+      if (this.#shadow && this.#shadow.scene) {
+        this.#shadow.setPosition(this._phaserGameObject.x + 32, this._phaserGameObject.y + 62);
+        this.#shadow.setDepth(this._phaserGameObject.depth - 1);
+      }
+    };
+    this._scene.events.on(Phaser.Scenes.Events.UPDATE, updateVisual);
+
+    this._phaserGameObject.on(Phaser.GameObjects.Events.DESTROY, () => {
+      this._scene.events.off(Phaser.Scenes.Events.UPDATE, updateVisual);
+      if (this.#npcVisual && this.#npcVisual.scene) {
+        this.#npcVisual.destroy();
+      }
+      if (this.#shadow && this.#shadow.scene) {
+        this.#shadow.destroy();
+      }
+    });
+
     this.#events = config.events;
     this.#animationKeyPrefix = config.animationKeyPrefix;
     this.#id = config.id;

@@ -24,9 +24,9 @@
         "data": {
           "id": 1001,
           "messages": [
-            "I know all kids must leave home one day...",
-            "Right! I must be strong.",
-            "The professor next door was looking for you."
+            "Emergency broadcast! Rogue hacker apes have attacked Neo-City's central blockchain nodes!",
+            "Our consensus protocols are destabilizing rapidly.",
+            "Prof. Ledger has deployed you to secure 3 districts before the clock hits zero!"
           ]
         }
       },
@@ -76,9 +76,9 @@
         "data": {
           "id": 1002,
           "messages": [
-            "Wait right there!",
-            "Going into the wild grass is dangerous without your own partner.",
-            "Please take this Iguanignite..."
+            "Hold on right there, Hunter!",
+            "Breaching the firewall zone without a defensive crypto-bot is suicide.",
+            "Take this Cyber-Ignite unit to shield your wallet!"
           ]
         }
       },

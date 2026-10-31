@@ -116,3 +116,4 @@ const game = new Phaser.Game({
 5. **Phase 6**: Centralize mini-game tuning into `src/config/minigames-config.js` with all exact physics, speeds, and timers specified. Add 1s pause + "CHAIN BROKEN" on death, and global ESC pause.
 6. **Phase 7**: Smooth 180 ms walk / 110 ms run tile tweens. Pixel-crisp text. Sound volume normalization.
 7. **Phase 8**: 3 complete verification runs, FPS benchmarks, zero console errors.
+

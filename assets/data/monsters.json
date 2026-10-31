@@ -1,6 +1,6 @@
 [
   {
-    "id": "1",
+    "id": 1,
     "monsterId": 1,
     "name": "iguanignite",
     "assetKey": "IGUANIGNITE",
@@ -9,13 +9,10 @@
     "maxHp": 25,
     "attackIds": [2],
     "baseAttack": 5,
-    "currentAttack": 5,
-    "currentLevel": 5,
-    "baseExp": 50,
-    "currentExp": 125
+    "currentLevel": 5
   },
   {
-    "id": "2",
+    "id": 2,
     "monsterId": 2,
     "name": "carnodusk",
     "assetKey": "CARNODUSK",
@@ -24,13 +21,10 @@
     "maxHp": 25,
     "attackIds": [1],
     "baseAttack": 5,
-    "currentAttack": 5,
-    "currentLevel": 5,
-    "baseExp": 52,
-    "currentExp": 125
+    "currentLevel": 5
   },
   {
-    "id": "3",
+    "id": 3,
     "monsterId": 3,
     "name": "ignivolt",
     "assetKey": "IGNIVOLT",
@@ -39,13 +33,10 @@
     "maxHp": 25,
     "attackIds": [2],
     "baseAttack": 5,
-    "currentAttack": 5,
-    "currentLevel": 5,
-    "baseExp": 51,
-    "currentExp": 125
+    "currentLevel": 5
   },
   {
-    "id": "4",
+    "id": 4,
     "monsterId": 4,
     "name": "aquavalor",
     "assetKey": "AQUAVALOR",
@@ -54,13 +45,10 @@
     "maxHp": 25,
     "attackIds": [2],
     "baseAttack": 5,
-    "currentAttack": 5,
-    "currentLevel": 5,
-    "baseExp": 50,
-    "currentExp": 125
+    "currentLevel": 5
   },
   {
-    "id": "5",
+    "id": 5,
     "monsterId": 5,
     "name": "frostsaber",
     "assetKey": "FROSTSABER",
@@ -69,39 +57,6 @@
     "maxHp": 25,
     "attackIds": [1],
     "baseAttack": 5,
-    "currentAttack": 5,
-    "currentLevel": 5,
-    "baseExp": 53,
-    "currentExp": 125
-  },
-  {
-    "id": "6",
-    "monsterId": 3,
-    "name": "ignivolt",
-    "assetKey": "IGNIVOLT",
-    "assetFrame": 0,
-    "currentHp": 15,
-    "maxHp": 15,
-    "attackIds": [2],
-    "baseAttack": 3,
-    "currentAttack": 3,
-    "currentLevel": 3,
-    "baseExp": 40,
-    "currentExp": 27
-  },
-  {
-    "id": "7",
-    "monsterId": 2,
-    "name": "carnodusk",
-    "assetKey": "CARNODUSK",
-    "assetFrame": 0,
-    "currentHp": 15,
-    "maxHp": 15,
-    "attackIds": [1],
-    "baseAttack": 3,
-    "currentAttack": 3,
-    "currentLevel": 3,
-    "baseExp": 41,
-    "currentExp": 27
+    "currentLevel": 5
   }
 ]

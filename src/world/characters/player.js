@@ -1,9 +1,9 @@
 import { CHARACTER_ASSET_KEYS } from '../../assets/asset-keys.js';
 import { DIRECTION } from '../../common/direction.js';
-import { exhaustiveGuard } from '../../utils/guard.js';
 import { Character } from './character.js';
 import { getTargetPositionFromGameObjectPositionAndDirection } from '../../utils/grid-utils.js';
 import { TILE_SIZE } from '../../config.js';
+import { dataManager } from '../../utils/data-manager.js';
 
 /**
  * @typedef PlayerConfigProps
@@ -22,6 +22,10 @@ export class Player extends Character {
   #entranceLayer;
   /** @type {(entranceName: string, entranceId: string, isBuildingEntrance: boolean) => void} */
   #enterEntranceCallback;
+  /** @type {Phaser.GameObjects.Image} */
+  #catVisual;
+  /** @type {Phaser.GameObjects.Ellipse} */
+  #shadow;
 
   /**
    * @param {PlayerConfig} config
@@ -41,6 +45,36 @@ export class Player extends Character {
     });
     this.#entranceLayer = config.entranceLayer;
     this.#enterEntranceCallback = config.enterEntranceCallback;
+
+    // Hide original humanoid spritesheet
+    this._phaserGameObject.setAlpha(0);
+
+    // Chosen cat single-frame unit (crisp 46px tall, inside 64px tile, feet at bottom-centre)
+    const catAssetKey = dataManager.getPlayerCat();
+    this.#catVisual = this._scene.add
+      .image(config.position.x + 32, config.position.y + 62, catAssetKey)
+      .setOrigin(0.5, 1.0)
+      .setScale(1 / 3)
+      .setDepth(this._phaserGameObject.depth + 2);
+
+    if (this.#catVisual.texture) {
+      this.#catVisual.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+
+    // Soft oval shadow under character: ~28x8 px, black at 35% opacity
+    this.#shadow = this._scene.add
+      .ellipse(config.position.x + 32, config.position.y + 62, 28, 8, 0x000000, 0.35)
+      .setDepth(this._phaserGameObject.depth - 1);
+
+    // Ensure visual and shadow are cleaned up if base object is destroyed
+    this._phaserGameObject.on(Phaser.GameObjects.Events.DESTROY, () => {
+      if (this.#catVisual && this.#catVisual.scene) {
+        this.#catVisual.destroy();
+      }
+      if (this.#shadow && this.#shadow.scene) {
+        this.#shadow.destroy();
+      }
+    });
   }
 
   /**
@@ -51,27 +85,14 @@ export class Player extends Character {
   moveCharacter(direction, isRunning = false) {
     super.moveCharacter(direction, isRunning);
 
-    switch (this._direction) {
-      case DIRECTION.DOWN:
-      case DIRECTION.LEFT:
-      case DIRECTION.RIGHT:
-      case DIRECTION.UP:
-        if (
-          !this._phaserGameObject.anims.isPlaying ||
-          this._phaserGameObject.anims.currentAnim?.key !== `PLAYER_${this._direction}`
-        ) {
-          this._phaserGameObject.play(`PLAYER_${this._direction}`);
-        }
-        this._phaserGameObject.anims.timeScale = this._isRunning ? 2 : 1;
-        break;
-      case DIRECTION.NONE:
-        break;
-      default:
-        // We should never reach this default case
-        exhaustiveGuard(this._direction);
+    // Flip cat horizontally for left/right motion
+    if (this._direction === DIRECTION.LEFT) {
+      this.#catVisual.setFlipX(true);
+    } else if (this._direction === DIRECTION.RIGHT) {
+      this.#catVisual.setFlipX(false);
     }
 
-    // validate character is not moving and that the target position belongs to an entrance
+    // Validate entrance collision if not moving
     if (!this._isMoving && this.#entranceLayer !== undefined) {
       const targetPosition = getTargetPositionFromGameObjectPositionAndDirection(
         { x: this._phaserGameObject.x, y: this._phaserGameObject.y },
@@ -88,12 +109,43 @@ export class Player extends Character {
         return;
       }
 
-      // entrance is nearby and the player is trying to enter that location
       const entranceName = nearbyEntrance.properties.find((property) => property.name === 'connects_to').value;
       const entranceId = nearbyEntrance.properties.find((property) => property.name === 'entrance_id').value;
       const isBuildingEntrance =
         nearbyEntrance.properties.find((property) => property.name === 'is_building')?.value || false;
       this.#enterEntranceCallback(entranceName, entranceId, isBuildingEntrance);
+    }
+  }
+
+  /** @type {Phaser.GameObjects.Image} */
+  get catVisual() {
+    return this.#catVisual;
+  }
+
+  /**
+   * @param {DOMHighResTimeStamp} time
+   * @returns {void}
+   */
+  update(time) {
+    // 1px bob while moving, stationary when idle
+    const bobOffset = this._isMoving ? (Math.floor(time / 140) % 2 === 0 ? -1 : 0) : 0;
+
+    this.#catVisual.setPosition(
+      this._phaserGameObject.x + 32,
+      this._phaserGameObject.y + 62 + bobOffset
+    );
+    this.#shadow.setPosition(
+      this._phaserGameObject.x + 32,
+      this._phaserGameObject.y + 62
+    );
+    this.#catVisual.setDepth(this._phaserGameObject.depth + 2);
+    this.#shadow.setDepth(this._phaserGameObject.depth - 1);
+
+    // Maintain flip state
+    if (this._direction === DIRECTION.LEFT) {
+      this.#catVisual.setFlipX(true);
+    } else if (this._direction === DIRECTION.RIGHT) {
+      this.#catVisual.setFlipX(false);
     }
   }
 }

@@ -120,11 +120,11 @@ export class PreloadScene extends BaseScene {
     this.load.image(UI_ASSET_KEYS.MENU_BACKGROUND, `${kenneysAssetPath}/ui-space-expansion/glassPanel.png`);
     this.load.image(
       UI_ASSET_KEYS.MENU_BACKGROUND_PURPLE,
-      `${kenneysAssetPath}/ui-space-expansion/glassPanel_purple.png`
+      'assets/images/bithunter/ui/panel-network.png'
     );
-    this.load.image(UI_ASSET_KEYS.MENU_BACKGROUND_GREEN, `${kenneysAssetPath}/ui-space-expansion/glassPanel_green.png`);
-    this.load.image(UI_ASSET_KEYS.BLUE_BUTTON, `${kenneysAssetPath}/ui-pack/blue_button01.png`);
-    this.load.image(UI_ASSET_KEYS.BLUE_BUTTON_SELECTED, `${kenneysAssetPath}/ui-pack/blue_button00.png`);
+    this.load.image(UI_ASSET_KEYS.MENU_BACKGROUND_GREEN, 'assets/images/bithunter/ui/panel-network.png');
+    this.load.image(UI_ASSET_KEYS.BLUE_BUTTON, 'assets/images/bithunter/ui/panel-submenu.png');
+    this.load.image(UI_ASSET_KEYS.BLUE_BUTTON_SELECTED, 'assets/images/bithunter/ui/panel-submenu.png');
 
     // load json data
     this.load.json(DATA_ASSET_KEYS.ATTACKS, 'assets/data/attacks.json');
@@ -154,61 +154,66 @@ export class PreloadScene extends BaseScene {
     });
 
     // load world assets
-    this.load.spritesheet(WORLD_ASSET_KEYS.GRASS, `${monsterTamerAssetPath}/map/bushes.png`, {
+    this.load.spritesheet(WORLD_ASSET_KEYS.GRASS, 'assets/images/bithunter/props/card.png', {
       frameWidth: 64,
       frameHeight: 64,
     });
-    this.load.image(WORLD_ASSET_KEYS.MAIN_1_BACKGROUND, `${monsterTamerAssetPath}/map/main_1_level_background.png`);
+    this.load.image(WORLD_ASSET_KEYS.MAIN_1_BACKGROUND, 'assets/images/bithunter/maps/neo-city.png');
     this.load.tilemapTiledJSON(WORLD_ASSET_KEYS.MAIN_1_LEVEL, `assets/data/neo-city.json`);
     this.load.tilemapTiledJSON('NEO_CITY_LEVEL', `assets/data/neo-city.json`);
-    this.load.image(WORLD_ASSET_KEYS.WORLD_COLLISION, `${monsterTamerAssetPath}/map/collision.png`);
-    this.load.image(WORLD_ASSET_KEYS.MAIN_1_FOREGROUND, `${monsterTamerAssetPath}/map/main_1_level_foreground.png`);
-    this.load.image(WORLD_ASSET_KEYS.WORLD_ENCOUNTER_ZONE, `${monsterTamerAssetPath}/map/encounter.png`);
-    this.load.spritesheet(WORLD_ASSET_KEYS.BEACH, `${axulArtAssetPath}/beach/crushed.png`, {
+    this.load.image(WORLD_ASSET_KEYS.WORLD_COLLISION, 'assets/images/bithunter/maps/main_1_level_foreground.png');
+    this.load.image(WORLD_ASSET_KEYS.MAIN_1_FOREGROUND, 'assets/images/bithunter/maps/main_1_level_foreground.png');
+    this.load.image(WORLD_ASSET_KEYS.WORLD_ENCOUNTER_ZONE, 'assets/images/bithunter/props/card.png');
+    this.load.spritesheet(WORLD_ASSET_KEYS.BEACH, 'assets/images/bithunter/props/card.png', {
       frameWidth: 64,
       frameHeight: 64,
     });
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_1_FOREGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_1_level_foreground.png`
+      'assets/images/bithunter/maps/main_1_level_foreground.png'
     );
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_1_BACKGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_1_level_background.png`
+      'assets/images/bithunter/maps/neo-city.png'
     );
     this.load.tilemapTiledJSON(BUILDING_ASSET_KEYS.BUILDING_1_LEVEL, `assets/data/building_1.json`);
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_2_FOREGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_2_level_foreground.png`
+      'assets/images/bithunter/maps/main_1_level_foreground.png'
     );
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_2_BACKGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_2_level_background.png`
+      'assets/images/bithunter/maps/neo-city.png'
     );
     this.load.tilemapTiledJSON(BUILDING_ASSET_KEYS.BUILDING_3_LEVEL, `assets/data/building_3.json`);
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_3_FOREGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_3_level_foreground.png`
+      'assets/images/bithunter/maps/main_1_level_foreground.png'
     );
     this.load.image(
       BUILDING_ASSET_KEYS.BUILDING_3_BACKGROUND,
-      `${monsterTamerAssetPath}/map/buildings/building_3_level_background.png`
+      'assets/images/bithunter/maps/neo-city.png'
     );
     this.load.tilemapTiledJSON(BUILDING_ASSET_KEYS.BUILDING_2_LEVEL, `assets/data/building_2.json`);
 
-    this.load.image(WORLD_ASSET_KEYS.FOREST_1_BACKGROUND, `${monsterTamerAssetPath}/map/forest_1_level_background.png`);
-    this.load.image(WORLD_ASSET_KEYS.FOREST_1_FOREGROUND, `${monsterTamerAssetPath}/map/forest_1_level_foreground.png`);
+    this.load.image(WORLD_ASSET_KEYS.FOREST_1_BACKGROUND, 'assets/images/bithunter/maps/neo-city.png');
+    this.load.image(WORLD_ASSET_KEYS.FOREST_1_FOREGROUND, 'assets/images/bithunter/maps/main_1_level_foreground.png');
     this.load.tilemapTiledJSON(WORLD_ASSET_KEYS.FOREST_1_LEVEL, `assets/data/forest_1.json`);
 
     // load character images
-    this.load.spritesheet(CHARACTER_ASSET_KEYS.PLAYER, `${axulArtAssetPath}/character/custom.png`, {
-      frameWidth: 64,
-      frameHeight: 88,
+    this.load.spritesheet(CHARACTER_ASSET_KEYS.PLAYER, 'assets/images/bithunter/characters/cat-1.png', {
+      frameWidth: 98,
+      frameHeight: 138,
     });
-    this.load.spritesheet(CHARACTER_ASSET_KEYS.NPC, `${pbGamesAssetPath}/characters.png`, {
+    this.load.spritesheet(CHARACTER_ASSET_KEYS.NPC, 'assets/images/bithunter/characters/npc-01.png', {
       frameWidth: 16,
       frameHeight: 16,
     });
+
+    // Hacker Ape enemies
+    this.load.image('HACKER_APE_1', 'assets/images/bithunter/enemies/ape-1.png');
+    this.load.image('HACKER_APE_2', 'assets/images/bithunter/enemies/ape-2.png');
+    this.load.image('HACKER_APE_3', 'assets/images/bithunter/enemies/ape-3.png');
 
     // ui components for title
     this.load.image(TITLE_ASSET_KEYS.BACKGROUND, `${monsterTamerAssetPath}/ui/title/background.png`);
@@ -280,6 +285,9 @@ export class PreloadScene extends BaseScene {
   #createAnimations() {
     const animations = DataUtils.getAnimations(this);
     animations.forEach((animation) => {
+      if (!this.textures.exists(animation.assetKey)) {
+        return;
+      }
       const frames = animation.frames
         ? this.anims.generateFrameNumbers(animation.assetKey, { frames: animation.frames })
         : this.anims.generateFrameNumbers(animation.assetKey);
